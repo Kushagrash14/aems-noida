@@ -3,19 +3,21 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   devIndicators: false,
   allowedDevOrigins: [
-    '192.168.22.161',
-    '192.168.26.80',
     '192.168.*.*',
     '10.*.*.*',
+    '172.*.*.*',
     'localhost',
     '127.0.0.1',
   ],
   experimental: {
     serverActions: {
       allowedOrigins: [
-        '192.168.22.161:3000',
-        '192.168.26.80:3000',
+        '192.168.*.*',
+        '10.*.*.*',
+        '172.*.*.*',
+        'localhost',
         'localhost:3000',
+        '127.0.0.1',
         '127.0.0.1:3000',
       ],
     },
