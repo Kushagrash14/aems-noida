@@ -36,6 +36,13 @@ function state(): PersistenceState {
 }
 
 function flush(): void {
+  if (
+    process.env.NEXT_PHASE === 'phase-production-build' ||
+    process.env.npm_lifecycle_event === 'build' ||
+    process.argv.some((arg) => typeof arg === 'string' && arg.includes('build'))
+  ) {
+    return;
+  }
   const s = state();
   // Keep saved sections whose module has not been loaded in this process yet.
   const payload: Record<string, unknown> = { ...(s.snapshot || {}) };

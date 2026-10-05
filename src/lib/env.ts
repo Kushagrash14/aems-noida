@@ -50,7 +50,12 @@ function getValidatedEnv(): EnvConfig {
 
   const shared = { appUrl, cookieSecure, smtpEmail, smtpPassword, smtpHost, smtpPort, otpFromEmail };
 
-  if (isMockMode && process.env.NODE_ENV === 'production') {
+  const isBuildPhase =
+    process.env.NEXT_PHASE === 'phase-production-build' ||
+    process.env.npm_lifecycle_event === 'build' ||
+    process.argv.some((arg) => typeof arg === 'string' && arg.includes('build'));
+
+  if (isMockMode && process.env.NODE_ENV === 'production' && !isBuildPhase) {
     throw new Error('[AEMS v2 FATAL] AEMS_MOCK_MODE=true is not allowed in production. Remove it from the environment.');
   }
 
@@ -71,6 +76,16 @@ function getValidatedEnv(): EnvConfig {
   if (!sessionSecret) missing.push('SESSION_SECRET');
 
   if (missing.length > 0) {
+    // If running during Next.js production build without DB connected yet, return build safe placeholder
+    if (isBuildPhase) {
+      return {
+        ...shared,
+        db,
+        sessionSecret: sessionSecret || 'build-time-dummy-session-secret-key-32-chars',
+        isMockMode: true,
+      };
+    }
+
     // If running in development without credentials, default to mock mode with loud console warning
     if (process.env.NODE_ENV === 'development') {
       console.warn(
