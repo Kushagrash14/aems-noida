@@ -1,0 +1,23 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { validateSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth/session';
+
+export async function GET(req: NextRequest) {
+  const token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const validation = await validateSessionToken(token);
+
+  if (!validation.valid) {
+    return NextResponse.json(
+      {
+        authenticated: false,
+        reason: validation.reason || 'unauthorized',
+      },
+      { status: 401 }
+    );
+  }
+
+  return NextResponse.json({
+    authenticated: true,
+    user: validation.user,
+    scope: validation.scope,
+  });
+}

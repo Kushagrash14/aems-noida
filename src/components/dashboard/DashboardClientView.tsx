@@ -1,0 +1,382 @@
+'use client';
+
+import { useMemo, useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  Asset,
+  Category,
+  Department,
+  Location,
+  Plant,
+  PMComplaint,
+  DamageScrapReport,
+  User,
+  UserScope,
+} from '@/types/database';
+import DashboardKPISection from './DashboardKPISection';
+import AssetPlantChart from './charts/AssetPlantChart';
+import AssetStatusCard from './charts/AssetStatusCard';
+import AssetDepartmentChart from './charts/AssetDepartmentChart';
+import AssetAgeDistributionChart from './charts/AssetAgeDistributionChart';
+import WarrantyCard from './WarrantyCard';
+import AmcCard from './AmcCard';
+import AssetValueByPlantChart from './charts/AssetValueByPlantChart';
+import AssetTrendChart from './charts/AssetTrendChart';
+import DepartmentTrendChart from './charts/DepartmentTrendChart';
+import { DrillDownApi, DrillDownContext } from './charts/DrillDownContext';
+import DashboardKPIModal from './DashboardKPIModal';
+
+type DrillDownState = { title: string; subtitle?: string; assets: Asset[] };
+import { Filter, X, RotateCcw, ShieldCheck } from 'lucide-react';
+
+interface DashboardClientViewProps {
+  initialAssets: Asset[];
+  complaints: PMComplaint[];
+  damageReports: DamageScrapReport[];
+  locations: Location[];
+  plants: Plant[];
+  departments: Department[];
+  categories: Category[];
+  user: User | null;
+  scope: UserScope | null;
+}
+
+export default function DashboardClientView({
+  initialAssets,
+  complaints,
+  damageReports,
+  locations,
+  plants,
+  departments,
+  categories,
+  user,
+  scope,
+}: DashboardClientViewProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Local live state initialized from server payload
+  const [assets, setAssets] = useState<Asset[]>(initialAssets);
+  const [drillDown, setDrillDown] = useState<DrillDownState | null>(null);
+
+  const drillDownApi = useMemo<DrillDownApi>(
+    () => ({
+      openAssets: (title, list, subtitle) => setDrillDown({ title, subtitle, assets: list }),
+    }),
+    []
+  );
+
+  // Synchronize when server initialAssets change
+  useEffect(() => {
+    setAssets(initialAssets);
+  }, [initialAssets]);
+
+  // Real-time automatic background refresh on focus and custom asset updates
+  useEffect(() => {
+    let isMounted = true;
+    const fetchLatestAssets = async () => {
+      try {
+        const res = await fetch('/api/assets');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (isMounted && Array.isArray(data.assets)) {
+          setAssets(data.assets);
+        }
+      } catch {}
+    };
+
+    let lastFetched = Date.now();
+    const handleFocus = () => {
+      if (Date.now() - lastFetched > 45000) {
+        lastFetched = Date.now();
+        fetchLatestAssets();
+      }
+    };
+
+    const handleAssetEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<Asset>;
+      if (customEvent.detail && customEvent.detail.id) {
+        setAssets((prev) =>
+          prev.map((a) => (a.id === customEvent.detail.id ? customEvent.detail : a))
+        );
+      }
+      fetchLatestAssets();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('aems:asset-updated', handleAssetEvent);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('aems:asset-updated', handleAssetEvent);
+    };
+  }, []);
+
+  // 1. Read Filter State DIRECTLY from Navbar URL Search Params
+  const selectedLocation = searchParams.get('locationId') || '';
+  const selectedPlant = searchParams.get('plantId') || '';
+  const selectedDepartment = searchParams.get('deptId') || '';
+  const selectedCategory = searchParams.get('categoryId') || '';
+  const selectedStatus = searchParams.get('status') || '';
+  const searchQuery = (searchParams.get('search') || '').toLowerCase().trim();
+
+  // Helper to remove individual filter or clear all
+  const updateUrlParams = (updates: Record<string, string | null>) => {
+    const params = new URLSearchParams(window.location.search);
+    Object.entries(updates).forEach(([key, val]) => {
+      if (val === null || val === '' || val === 'ALL') {
+        params.delete(key);
+      } else {
+        params.set(key, val);
+      }
+    });
+    const qs = params.toString();
+    const currentPath = window.location.pathname;
+    router.replace(qs ? `${currentPath}?${qs}` : currentPath, { scroll: false });
+  };
+
+  const handleClearAllFilters = () => {
+    updateUrlParams({
+      locationId: null,
+      plantId: null,
+      deptId: null,
+      categoryId: null,
+      status: null,
+      search: null,
+    });
+  };
+
+  // Human-readable labels for active filter chips
+  const activeLoc = locations.find((l) => l.id === selectedLocation);
+  const activePlt = plants.find((p) => p.id === selectedPlant);
+  const activeDept = departments.find((d) => d.id === selectedDepartment);
+  const activeCat = categories.find((c) => c.id === selectedCategory);
+
+  const hasActiveFilters = Boolean(
+    selectedLocation || selectedPlant || selectedDepartment || selectedCategory || (selectedStatus && selectedStatus !== 'ALL') || searchQuery
+  );
+
+  // 2. Filtered Assets Pipeline — Fully Synced with Navbar
+  const filteredAssets = useMemo(() => {
+    return assets.filter((asset) => {
+      // Location Filter
+      if (selectedLocation) {
+        const matchesLoc =
+          asset.current_location_id === selectedLocation ||
+          (asset.location && asset.location.id === selectedLocation);
+        if (!matchesLoc) return false;
+      }
+
+      // Plant Filter
+      if (selectedPlant) {
+        const matchesPlant =
+          asset.current_plant_id === selectedPlant ||
+          (asset.plant && asset.plant.id === selectedPlant);
+        if (!matchesPlant) return false;
+      }
+
+      // Department Filter
+      if (selectedDepartment) {
+        const matchesDept =
+          asset.current_department_id === selectedDepartment ||
+          (asset.department && asset.department.id === selectedDepartment);
+        if (!matchesDept) return false;
+      }
+
+      // Category Filter
+      if (selectedCategory) {
+        const matchesCat =
+          asset.category_id === selectedCategory ||
+          (asset.category && asset.category.id === selectedCategory);
+        if (!matchesCat) return false;
+      }
+
+      // Status Filter
+      if (selectedStatus && selectedStatus !== 'ALL') {
+        if (asset.status !== selectedStatus) return false;
+      }
+
+      // Search Query Filter
+      if (searchQuery) {
+        const tag = (asset.asset_tag || '').toLowerCase();
+        const name = (asset.name || '').toLowerCase();
+        const serial = (asset.serial_number || '').toLowerCase();
+        const model = (asset.model || '').toLowerCase();
+        const custodian = (asset.assigned_employee?.full_name || '').toLowerCase();
+        const empCode = (asset.assigned_employee?.emp_code || '').toLowerCase();
+
+        const hit =
+          tag.includes(searchQuery) ||
+          name.includes(searchQuery) ||
+          serial.includes(searchQuery) ||
+          model.includes(searchQuery) ||
+          custodian.includes(searchQuery) ||
+          empCode.includes(searchQuery);
+
+        if (!hit) return false;
+      }
+
+      return true;
+    });
+  }, [assets, selectedLocation, selectedPlant, selectedDepartment, selectedCategory, selectedStatus, searchQuery]);
+  return (
+    <div className="antialiased font-sans pb-10">
+      {/* 1. Pinned Sticky KPI Cards (Connected seamlessly to Navbar, 100% Solid Opaque Shield) */}
+      <DashboardKPISection
+        assets={filteredAssets}
+        complaints={complaints}
+        damageReports={damageReports}
+        departments={departments}
+        plants={plants}
+        locations={locations}
+        categories={categories}
+        onAssetUpdated={(updated) => {
+          setAssets((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+        }}
+      />
+
+      {/* 2. Scrolling Analytics & Visualizations Container */}
+      <div className="pt-3.5 space-y-4">
+        {/* Synced Navbar Filter Scope Indicator Bar */}
+        {hasActiveFilters && (
+          <div className="flex items-center justify-between gap-2 p-2 bg-blue-50/80 border border-blue-200/80 rounded-xl text-xs text-blue-900 shadow-2xs animate-in fade-in duration-150">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] font-black uppercase text-blue-700 tracking-wider flex items-center gap-1">
+                <Filter className="w-3 h-3" />
+                <span>Filters:</span>
+              </span>
+
+              {activeLoc && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-200 text-[11px] font-bold text-slate-800">
+                  <span>Location: {activeLoc.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => updateUrlParams({ locationId: null, plantId: null })}
+                    className="text-slate-400 hover:text-rose-600"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {activePlt && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-200 text-[11px] font-bold text-slate-800">
+                  <span>Plant: {activePlt.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => updateUrlParams({ plantId: null })}
+                    className="text-slate-400 hover:text-rose-600"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {activeDept && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-200 text-[11px] font-bold text-slate-800">
+                  <span>Department: {activeDept.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => updateUrlParams({ deptId: null })}
+                    className="text-slate-400 hover:text-rose-600"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {activeCat && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-200 text-[11px] font-bold text-slate-800">
+                  <span>Category: {activeCat.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => updateUrlParams({ categoryId: null })}
+                    className="text-slate-400 hover:text-rose-600"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {selectedStatus && selectedStatus !== 'ALL' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-200 text-[11px] font-bold text-slate-800 uppercase">
+                  <span>Status: {selectedStatus.replace(/_/g, ' ')}</span>
+                  <button
+                    type="button"
+                    onClick={() => updateUrlParams({ status: null })}
+                    className="text-slate-400 hover:text-rose-600"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {searchQuery && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-200 text-[11px] font-bold text-slate-800">
+                  <span>Search: &ldquo;{searchQuery}&rdquo;</span>
+                  <button
+                    type="button"
+                    onClick={() => updateUrlParams({ search: null })}
+                    className="text-slate-400 hover:text-rose-600"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleClearAllFilters}
+              className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer shrink-0 ml-2"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Clear All</span>
+            </button>
+          </div>
+        )}
+
+        <DrillDownContext.Provider value={drillDownApi}>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 md:[&>*:last-child]:col-span-2 xl:[&>*:last-child]:col-span-1 gap-4.5 relative z-10 items-stretch">
+          <AssetPlantChart assets={filteredAssets} plants={plants} />
+          <AssetStatusCard assets={filteredAssets} />
+          <AssetDepartmentChart assets={filteredAssets} departments={departments} />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 md:[&>*:last-child]:col-span-2 xl:[&>*:last-child]:col-span-1 gap-4.5 relative z-10 items-stretch">
+          <AssetAgeDistributionChart assets={filteredAssets} />
+          <WarrantyCard assets={filteredAssets} />
+          <AssetTrendChart assets={filteredAssets} />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 md:[&>*:last-child]:col-span-2 xl:[&>*:last-child]:col-span-1 gap-4.5 relative z-10 items-stretch">
+          <AssetValueByPlantChart assets={filteredAssets} plants={plants} />
+          <AmcCard assets={filteredAssets} />
+          <DepartmentTrendChart assets={filteredAssets} departments={departments} />
+        </div>
+        </DrillDownContext.Provider>
+      </div>
+
+      {drillDown && (
+        <DashboardKPIModal
+          isOpen
+          onClose={() => setDrillDown(null)}
+          kpiType="total"
+          customTitle={drillDown.title}
+          customSubtitle={drillDown.subtitle || `${drillDown.assets.length} assets in this segment`}
+          assets={drillDown.assets}
+          onAssetUpdated={(updated) => {
+            setAssets((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+          }}
+          complaints={complaints}
+          damageReports={damageReports}
+          departments={departments}
+          plants={plants}
+          locations={locations}
+          categories={categories}
+        />
+      )}
+    </div>
+  );
+}

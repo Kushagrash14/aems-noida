@@ -1,0 +1,233 @@
+@import "tailwindcss";
+
+:root {
+  --background: #FAF9F5;
+  --foreground: #1c1917;
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --surface: #ffffff;
+  --surface-border: #e7e5e4;
+}
+
+body {
+  background-color: #FAF9F5;
+  color: #1c1917;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Warm white scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f5f5f4;
+}
+::-webkit-scrollbar-thumb {
+  background: #d6d3d1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a29e;
+}
+
+/* Warm White Cards & Panels */
+.glass-panel {
+  background: #ffffff;
+  border: 1px solid #e7e5e4;
+  box-shadow: 0 1px 3px 0 rgba(28, 25, 23, 0.04), 0 1px 2px -1px rgba(28, 25, 23, 0.04);
+}
+
+.glass-card {
+  background: #ffffff;
+  border: 1px solid #e7e5e4;
+  box-shadow: 0 1px 3px 0 rgba(28, 25, 23, 0.04);
+  transition: all 0.2s ease-in-out;
+}
+
+.glass-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 10px 25px -5px rgba(28, 25, 23, 0.08), 0 8px 10px -6px rgba(28, 25, 23, 0.04);
+}
+
+/* Status indicator pulses */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Dashboard chart entrance animations */
+@keyframes bar-grow-x {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes bar-grow-y {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-bar-x {
+  transform-origin: left center;
+  animation: bar-grow-x 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-bar-y {
+  transform-origin: bottom center;
+  animation: bar-grow-y 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade-up {
+  animation: fade-up 0.5s ease-out both;
+}
+
+@keyframes bar-spring-y {
+  0% { transform: scaleY(0); }
+  70% { transform: scaleY(1.06); }
+  85% { transform: scaleY(0.98); }
+  100% { transform: scaleY(1); }
+}
+
+@keyframes bar-shine {
+  from { transform: translateY(110%); }
+  to { transform: translateY(-110%); }
+}
+
+.animate-bar-spring {
+  transform-origin: bottom center;
+  animation: bar-spring-y 1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.bar-shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.bar-shine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, transparent 0%, rgba(255, 255, 255, 0.55) 50%, transparent 100%);
+  transform: translateY(110%);
+  animation: bar-shine 1.1s ease-out both;
+  animation-delay: calc(var(--bar-delay, 0ms) + 700ms);
+}
+
+@keyframes glow-pulse {
+  0% { box-shadow: 0 0 0 0 var(--glow), 0 0 10px 0 var(--glow); }
+  70% { box-shadow: 0 0 0 7px transparent, 0 0 14px 2px var(--glow); }
+  100% { box-shadow: 0 0 0 0 transparent, 0 0 10px 0 var(--glow); }
+}
+
+.animate-glow {
+  animation: glow-pulse 2.2s ease-out infinite;
+}
+
+@keyframes bar-sweep {
+  0% { transform: translateX(-100%); }
+  60%, 100% { transform: translateX(250%); }
+}
+
+.bar-sweep {
+  overflow: hidden;
+}
+
+.bar-sweep::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  animation: bar-sweep 2.8s ease-in-out 1.2s infinite;
+}
+
+@keyframes line-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+
+.animate-line {
+  stroke-dasharray: 1;
+  animation: line-draw 1.4s cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+
+@keyframes area-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-area {
+  animation: area-fade 0.9s ease-out both;
+}
+
+@keyframes dot-pop {
+  0% { transform: scale(0); opacity: 0; }
+  70% { transform: scale(1.25); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.animate-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: dot-pop 0.45s ease-out both;
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-glow,
+  .animate-line,
+  .animate-area,
+  .animate-dot,
+  .animate-slide-in,
+  .bar-sweep::after,
+  .animate-bar-x,
+  .animate-bar-y,
+  .animate-bar-spring,
+  .animate-fade-up,
+  .bar-shine::after {
+    animation: none;
+  }
+}
+
+/* Hide Next.js dev indicator / floating "N" logo overlay */
+nextjs-portal,
+[data-nextjs-toast],
+[data-nextjs-dialog-overlay],
+[data-nextjs-dev-tools],
+#__next-build-watcher,
+div[data-nextjs-route-announcer] + * {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Hide number input spin buttons / up-down arrows across all browsers */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+
+input[type='number'] {
+  -moz-appearance: textfield !important;
+  appearance: textfield !important;
+}
+
