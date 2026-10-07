@@ -1522,7 +1522,7 @@ function SettingsContent() {
                                   )}
                                 </>
                               ) : (
-                                <span className="text-[11px] text-slate-400 italic">Locked</span>
+                                <span className="text-[11px] text-slate-400 italic">View Only</span>
                               )}
                             </div>
                           </td>
@@ -2419,7 +2419,7 @@ function SettingsContent() {
                         <ShieldCheck className="w-3.5 h-3.5 shrink-0 text-blue-600" />
                         <span>USER</span>
                       </div>
-                      <span className="text-[9px] bg-blue-600 text-white font-extrabold px-1.5 py-0.5 rounded uppercase">Locked</span>
+                      <span className="text-[9px] bg-blue-600 text-white font-extrabold px-1.5 py-0.5 rounded uppercase">Standard</span>
                     </div>
                   ) : (
                     <select
@@ -2753,7 +2753,7 @@ function SettingsContent() {
                         <ShieldCheck className="w-3.5 h-3.5 shrink-0 text-blue-600" />
                         <span>USER</span>
                       </div>
-                      <span className="text-[9px] bg-blue-600 text-white font-extrabold px-1.5 py-0.5 rounded uppercase">Locked</span>
+                      <span className="text-[9px] bg-blue-600 text-white font-extrabold px-1.5 py-0.5 rounded uppercase">Standard</span>
                     </div>
                   ) : (
                     <select

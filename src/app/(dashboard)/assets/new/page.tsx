@@ -2699,9 +2699,14 @@ function AssetWizardContent() {
                   )}
                 </div>
                 {isDeptLockedForUser ? (
-                  <div className="w-full bg-slate-100/90 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-black text-slate-800 flex items-center justify-between cursor-not-allowed select-none shadow-2xs">
-                    <span>{selectedDeptName}</span>
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider bg-slate-200 px-2 py-0.5 rounded">Locked to Your Dept</span>
+                  <div className="w-full bg-blue-50/60 border border-blue-200/80 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 flex items-center justify-between shadow-2xs select-none">
+                    <span className="flex items-center gap-2">
+                      <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                      <span>{selectedDeptName}</span>
+                    </span>
+                    <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider bg-blue-100 px-2.5 py-0.5 rounded-md border border-blue-200">
+                      Assigned Department
+                    </span>
                   </div>
                 ) : (
                   <SearchableCombobox
@@ -4203,10 +4208,10 @@ function AssetWizardContent() {
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Location *</label>
                 {currentUser?.role !== 'it_admin' ? (
-                  <div className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 flex items-center justify-between shadow-2xs">
+                  <div className="w-full bg-blue-50/60 border border-blue-200/80 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 flex items-center justify-between shadow-2xs">
                     <span>{locations.find((loc) => loc.id === locationId)?.name || 'Assigned Location'}</span>
-                    <span className="text-[10px] text-slate-500 font-bold bg-slate-200 px-1.5 py-0.5 rounded border border-slate-300">
-                      Locked
+                    <span className="text-[10px] text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded-md border border-blue-200">
+                      Assigned
                     </span>
                   </div>
                 ) : (
@@ -4227,10 +4232,10 @@ function AssetWizardContent() {
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Plant / Unit *</label>
                 {currentUser?.role !== 'it_admin' ? (
-                  <div className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 flex items-center justify-between shadow-2xs">
+                  <div className="w-full bg-blue-50/60 border border-blue-200/80 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 flex items-center justify-between shadow-2xs">
                     <span>{plants.find((plant) => plant.id === plantId)?.name || 'Assigned Plant'}</span>
-                    <span className="text-[10px] text-slate-500 font-bold bg-slate-200 px-1.5 py-0.5 rounded border border-slate-300">
-                      Locked
+                    <span className="text-[10px] text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded-md border border-blue-200">
+                      Assigned
                     </span>
                   </div>
                 ) : (
