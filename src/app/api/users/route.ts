@@ -18,12 +18,21 @@ export async function GET(req: NextRequest) {
 
   let users = await getUsersWithScopes();
 
-  // If Admin, only return users within their assigned department, plant, and location
+  // If Admin, only return users within their assigned department and permitted plants
   if (validation.user.role === 'admin') {
+    const adminPltIds = validation.scope?.plant_ids && validation.scope.plant_ids.length > 0
+      ? validation.scope.plant_ids
+      : (validation.user!.plant_id ? [validation.user!.plant_id] : []);
+
     users = users.filter((u) => {
       if (validation.user!.department_id && u.department_id !== validation.user!.department_id) return false;
-      if (validation.user!.plant_id && u.plant_id !== validation.user!.plant_id) return false;
-      if (validation.user!.location_id && u.location_id !== validation.user!.location_id) return false;
+      if (adminPltIds.length > 0) {
+        const uPltIds = u.scope?.plant_ids && u.scope.plant_ids.length > 0
+          ? u.scope.plant_ids
+          : (u.plant_id ? [u.plant_id] : []);
+        const sharesPlant = uPltIds.some((pid) => adminPltIds.includes(pid));
+        if (!sharesPlant && u.plant_id && !adminPltIds.includes(u.plant_id)) return false;
+      }
       return true;
     });
   }
@@ -78,7 +87,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Role and Scope enforcement:
-    // If Admin is registering, they can ONLY create role 'user' within their own Location, Plant, Department
+    // If Admin is registering, they can ONLY create role 'user' within their own Department & permitted Plants
     let resolvedRole: 'it_admin' | 'admin' | 'user' = role as 'it_admin' | 'admin' | 'user';
     let resolvedLocId = location_id || null;
     let resolvedPltId = plant_id || null;
@@ -92,9 +101,24 @@ export async function POST(req: NextRequest) {
         );
       }
       resolvedRole = 'user';
-      resolvedLocId = validation.user.location_id || resolvedLocId;
-      resolvedPltId = validation.user.plant_id || resolvedPltId;
       resolvedDeptId = validation.user.department_id || resolvedDeptId;
+
+      // Allow admin to assign any plant from their permitted plants
+      const adminPltIds = validation.scope?.plant_ids && validation.scope.plant_ids.length > 0
+        ? validation.scope.plant_ids
+        : (validation.user.plant_id ? [validation.user.plant_id] : []);
+
+      if (adminPltIds.length > 0) {
+        if (Array.isArray(plant_ids) && plant_ids.length > 0) {
+          const unauthorized = plant_ids.find((pid) => !adminPltIds.includes(pid));
+          if (unauthorized) {
+            return NextResponse.json(
+              { error: 'Access Denied: You cannot assign a plant outside your authorized plants' },
+              { status: 403 }
+            );
+          }
+        }
+      }
     }
 
     const isItAdmin = resolvedRole === 'it_admin';
@@ -107,7 +131,7 @@ export async function POST(req: NextRequest) {
       : null;
     const primaryPlantId = isItAdmin
       ? null
-      : resolvedPltId || (incomingPlantIds && incomingPlantIds.length > 0 ? incomingPlantIds[0] : null);
+      : (incomingPlantIds && incomingPlantIds.length > 0 ? incomingPlantIds[0] : resolvedPltId);
 
     const createdUser = await createUser(
       {
@@ -201,6 +225,30 @@ export async function PATCH(req: NextRequest) {
       const isAllowed = canAssignRole(validation.user, validation.scope, targetRole);
       if (!isAllowed) {
         return NextResponse.json({ error: 'Access Denied: You are not authorized to assign this role' }, { status: 403 });
+      }
+    }
+
+    // Role and Scope enforcement for Admin modifying users
+    if (validation.user.role === 'admin') {
+      if (targetRole && targetRole !== 'user') {
+        return NextResponse.json(
+          { error: 'Access Denied: Facility Admins can only assign standard User roles' },
+          { status: 403 }
+        );
+      }
+
+      const adminPltIds = validation.scope?.plant_ids && validation.scope.plant_ids.length > 0
+        ? validation.scope.plant_ids
+        : (validation.user.plant_id ? [validation.user.plant_id] : []);
+
+      if (adminPltIds.length > 0 && Array.isArray(plant_ids) && plant_ids.length > 0) {
+        const unauthorized = plant_ids.find((pid) => !adminPltIds.includes(pid));
+        if (unauthorized) {
+          return NextResponse.json(
+            { error: 'Access Denied: You cannot assign a plant outside your authorized plants' },
+            { status: 403 }
+          );
+        }
       }
     }
 
