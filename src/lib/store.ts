@@ -1993,6 +1993,10 @@ async function insertAssetRecord(
     if (dbAssetPayload.status === 'missing') {
       dbAssetPayload.status = 'damaged';
     }
+    const VALID_STATUS_ENUM = new Set(['in_service', 'maintenance', 'damaged', 'missing', 'scrapped', 'in_storage']);
+    if (!dbAssetPayload.status || !VALID_STATUS_ENUM.has(dbAssetPayload.status)) {
+      dbAssetPayload.status = 'in_service';
+    }
 
     const { data, error } = await db.from('assets').insert(dbAssetPayload).select().single();
 
