@@ -1890,19 +1890,21 @@ function AssetWizardContent() {
     e.preventDefault();
     setEmpModalError(null);
 
-    const cleanCode = newEmpCode.trim().toUpperCase();
-    if (!cleanCode || !newEmpName.trim()) {
-      setEmpModalError('Employee ID and Full Name are mandatory');
+    const cleanCode = newEmpCode.trim().toUpperCase() || `EMP-${Date.now().toString().slice(-6)}`;
+    if (!newEmpName.trim()) {
+      setEmpModalError('Full Name is mandatory');
       return;
     }
 
     // Duplicate Check: ensure no duplicate employee profile is created with same code
-    const existingEmp = employees.find((emp) => emp.emp_code.trim().toUpperCase() === cleanCode);
-    if (existingEmp) {
-      setEmpModalError(
-        `Employee ID "${cleanCode}" is already registered for ${existingEmp.full_name} (${existingEmp.department?.name || 'Department'}, ${existingEmp.location?.name || 'Location'}). A duplicate profile cannot be created.`
-      );
-      return;
+    if (newEmpCode.trim()) {
+      const existingEmp = employees.find((emp) => emp.emp_code.trim().toUpperCase() === cleanCode);
+      if (existingEmp) {
+        setEmpModalError(
+          `Employee ID "${cleanCode}" is already registered for ${existingEmp.full_name} (${existingEmp.department?.name || 'Department'}, ${existingEmp.location?.name || 'Location'}). A duplicate profile cannot be created.`
+        );
+        return;
+      }
     }
 
     if (newEmpPhone.trim() && newEmpPhone.trim().length !== 10) {
@@ -4338,14 +4340,13 @@ function AssetWizardContent() {
                 {/* 1. Employee ID (emp_code) */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Employee ID *
+                    Employee ID <span className="text-[10px] text-slate-400 font-normal">(Optional)</span>
                   </label>
                   <input
                     type="text"
-                    required
                     value={newEmpCode}
                     onChange={handleCapsChange(setNewEmpCode)}
-                    placeholder="e.g. PGEL-9901"
+                    placeholder="e.g. PGEL-9901 (optional)"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white uppercase"
                   />
                 </div>

@@ -195,8 +195,9 @@ function StaffDirectoryContent() {
     }
 
     try {
+      const rawCode = empCode.trim().toUpperCase();
       const payload = {
-        emp_code: empCode.trim().toUpperCase(),
+        emp_code: rawCode || `EMP-${Date.now().toString().slice(-6)}`,
         full_name: fullName.trim().toUpperCase(),
         email: email.trim().toLowerCase() || null,
         phone: phone.trim() || null,
@@ -1131,14 +1132,13 @@ function StaffDirectoryContent() {
                 {/* 1. Employee Code */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Employee ID / Code *
+                    Employee ID / Code <span className="text-[10px] text-slate-400 font-normal">(Optional)</span>
                   </label>
                   <input
                     type="text"
-                    required
                     value={empCode}
                     onChange={(e) => setEmpCode(e.target.value.toUpperCase())}
-                    placeholder="e.g. EMP-01"
+                    placeholder="e.g. EMP-01 (optional)"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white uppercase"
                   />
                 </div>

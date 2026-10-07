@@ -49,12 +49,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { emp_code, full_name, email, phone, designation, department_id, plant_id, location_id } = body;
 
-    if (!emp_code || !full_name || !department_id || !plant_id || !location_id) {
-      return NextResponse.json({ error: 'Missing mandatory employee fields' }, { status: 400 });
+    const rawCode = typeof emp_code === 'string' ? emp_code.trim() : '';
+    const cleanEmpCode = rawCode || `EMP-${Date.now().toString().slice(-6)}`;
+
+    if (!full_name || !department_id || !plant_id || !location_id) {
+      return NextResponse.json({ error: 'Missing mandatory employee fields (Name, Department, Plant, Location)' }, { status: 400 });
     }
 
     const employee = await createEmployee({
-      emp_code,
+      emp_code: cleanEmpCode,
       full_name,
       email: email || null,
       phone: phone || null,
