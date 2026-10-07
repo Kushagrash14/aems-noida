@@ -1967,8 +1967,9 @@ async function insertAssetRecord(
 
   // MySQL mode: the UNIQUE key on asset_tag rejects collisions; regenerate and retry.
   const VALID_ASSET_COLUMNS = new Set([
-    'id', 'asset_tag', 'serial_number', 'name', 'model', 'manufacturer',
+    'id', 'asset_tag', 'sap_asset_code', 'serial_number', 'name', 'model', 'manufacturer',
     'category_id', 'purchase_date', 'purchase_cost', 'po_number',
+    'invoice_number', 'invoice_date',
     'vendor_name', 'warranty_expiry', 'amc_vendor', 'amc_expiry',
     'invoice_document_path', 'current_location_id', 'current_plant_id',
     'current_department_id', 'assigned_employee_id', 'status',
@@ -2099,8 +2100,9 @@ async function applyAssetUpdate(
   updatedBy?: string
 ): Promise<Asset | null> {
   const VALID_ASSET_COLUMNS = new Set([
-    'id', 'asset_tag', 'serial_number', 'name', 'model', 'manufacturer',
+    'id', 'asset_tag', 'sap_asset_code', 'serial_number', 'name', 'model', 'manufacturer',
     'category_id', 'purchase_date', 'purchase_cost', 'po_number',
+    'invoice_number', 'invoice_date',
     'vendor_name', 'warranty_expiry', 'amc_vendor', 'amc_expiry',
     'invoice_document_path', 'current_location_id', 'current_plant_id',
     'current_department_id', 'assigned_employee_id', 'status',

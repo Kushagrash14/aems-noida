@@ -373,6 +373,21 @@ export default function AssetDetailPage() {
       : asset.custom_values) || {}),
   };
 
+  // Dynamic metadata extraction (from invoice_document_path if stored as JSON)
+  const parsedMeta = useMemo(() => {
+    if (!asset?.invoice_document_path || typeof asset.invoice_document_path !== 'string') return null;
+    if (!asset.invoice_document_path.trim().startsWith('{')) return null;
+    try {
+      return JSON.parse(asset.invoice_document_path);
+    } catch {
+      return null;
+    }
+  }, [asset?.invoice_document_path]);
+
+  const sapAssetCode = asset.sap_asset_code || parsedMeta?.sap_asset_code || null;
+  const invoiceNumber = asset.invoice_number || parsedMeta?.invoice_number || null;
+  const invoiceDate = asset.invoice_date || parsedMeta?.invoice_date || null;
+
   return (
     <div className="max-w-5xl mx-auto space-y-4 pb-16 font-sans">
       {/* Top Breadcrumb Navigation */}
@@ -412,6 +427,11 @@ export default function AssetDetailPage() {
                 <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-mono font-black tracking-wider uppercase border border-slate-200">
                   {asset.asset_tag}
                 </span>
+                {sapAssetCode && (
+                  <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 text-[10px] font-mono font-black tracking-wider uppercase border border-purple-200" title="SAP Asset Code">
+                    SAP: {sapAssetCode}
+                  </span>
+                )}
                 <span
                   className={`px-2 py-0.5 rounded-md text-[10px] font-black tracking-wider uppercase border ${
                     isScrapped
@@ -821,6 +841,15 @@ export default function AssetDetailPage() {
             </div>
 
             <div>
+              <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                SAP ASSET CODE
+              </span>
+              <span className="font-mono font-black text-purple-700 text-sm uppercase">
+                {sapAssetCode || 'N/A'}
+              </span>
+            </div>
+
+            <div>
               <span className="block text-[10px] font-extrabold text-blue-600 uppercase tracking-wider flex items-center gap-1">
                 <Server className="w-3 h-3 text-blue-600" />
                 HOSTNAME
@@ -939,7 +968,7 @@ export default function AssetDetailPage() {
             <span>COMMERCIAL, PURCHASE ORDER &amp; WARRANTY</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
               <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
                 VENDOR NAME
@@ -955,6 +984,24 @@ export default function AssetDetailPage() {
               </span>
               <span className="font-mono font-black text-blue-600 text-xs uppercase mt-0.5 block">
                 {asset.po_number || 'PO-2026-N/A'}
+              </span>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                INVOICE NUMBER
+              </span>
+              <span className="font-mono font-black text-slate-900 text-xs uppercase mt-0.5 block">
+                {invoiceNumber || 'N/A'}
+              </span>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                INVOICE DATE
+              </span>
+              <span className="font-black text-slate-900 text-xs uppercase mt-0.5 block">
+                {invoiceDate ? formatDate(invoiceDate) : 'N/A'}
               </span>
             </div>
 

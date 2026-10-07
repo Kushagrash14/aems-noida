@@ -140,7 +140,9 @@ export type AssetStatus = 'in_service' | 'maintenance' | 'damaged' | 'missing' |
 
 export interface Asset {
   id: string;
+  // Base Identification
   asset_tag: string;
+  sap_asset_code?: string | null;
   serial_number?: string | null;
   name: string;
   model?: string | null;
@@ -152,6 +154,8 @@ export interface Asset {
   purchase_date?: string | null;
   purchase_cost?: number | null;
   po_number?: string | null;
+  invoice_number?: string | null;
+  invoice_date?: string | null;
   vendor_name?: string | null;
   warranty_expiry?: string | null;
   amc_vendor?: string | null;

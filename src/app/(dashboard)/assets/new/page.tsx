@@ -183,6 +183,9 @@ interface DraftData {
   manufacturer: string;
   condition: 'new_purchase' | 'existing_asset';
   poNumber: string;
+  sapAssetCode?: string;
+  invoiceNumber?: string;
+  invoiceDate?: string;
   vendorName: string;
   purchaseDate: string;
   purchaseCost: string;
@@ -405,6 +408,7 @@ function AssetWizardContent() {
   const [model, setModel] = useState('');
   const [name, setName] = useState('');
   const [serialNumber, setSerialNumber] = useState('');
+  const [sapAssetCode, setSapAssetCode] = useState('');
   const [hostname, setHostname] = useState('');
   const [assetTag, setAssetTag] = useState(''); // Empty = auto-generated atomically on save
 
@@ -423,6 +427,8 @@ function AssetWizardContent() {
   // Commercial & Purchase
   const [vendorName, setVendorName] = useState('');
   const [poNumber, setPoNumber] = useState('');
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState('');
   const [purchaseDate, setPurchaseDate] = useState('');
   const [purchaseCost, setPurchaseCost] = useState('');
   const [warrantyExpiry, setWarrantyExpiry] = useState('');
@@ -989,14 +995,28 @@ function AssetWizardContent() {
       .then((data) => {
         if (data?.asset) {
           const a = data.asset;
+
+          // Parse metadata stored in invoice_document_path
+          let meta: any = null;
+          if (a.invoice_document_path && typeof a.invoice_document_path === 'string' && a.invoice_document_path.trim().startsWith('{')) {
+            try {
+              meta = JSON.parse(a.invoice_document_path);
+            } catch (e) {
+              console.warn('Failed to parse asset doc metadata:', e);
+            }
+          }
+
           if (a.name) setName(a.name);
           if (a.manufacturer) setManufacturer(a.manufacturer);
           if (a.model) setModel(a.model);
           if (a.serial_number) setSerialNumber(a.serial_number);
+          if (a.sap_asset_code || meta?.sap_asset_code) setSapAssetCode(a.sap_asset_code || meta?.sap_asset_code || '');
           if (a.hostname) setHostname(a.hostname);
           if (a.asset_tag) setAssetTag(a.asset_tag);
           if (a.vendor_name) setVendorName(a.vendor_name);
           if (a.po_number) setPoNumber(a.po_number);
+          if (a.invoice_number || meta?.invoice_number) setInvoiceNumber(a.invoice_number || meta?.invoice_number || '');
+          if (a.invoice_date || meta?.invoice_date) setInvoiceDate(a.invoice_date || meta?.invoice_date || '');
           if (a.purchase_date) setPurchaseDate(a.purchase_date);
           if (a.purchase_cost) setPurchaseCost(String(a.purchase_cost));
           if (a.warranty_expiry) setWarrantyExpiry(a.warranty_expiry);
@@ -1026,16 +1046,6 @@ function AssetWizardContent() {
           }
           if (a.peripherals && Array.isArray(a.peripherals)) {
             setPeripherals(a.peripherals);
-          }
-
-          // Parse metadata stored in invoice_document_path
-          let meta: any = null;
-          if (a.invoice_document_path && typeof a.invoice_document_path === 'string' && a.invoice_document_path.trim().startsWith('{')) {
-            try {
-              meta = JSON.parse(a.invoice_document_path);
-            } catch (e) {
-              console.warn('Failed to parse asset doc metadata:', e);
-            }
           }
 
           // 1. Condition: Existing vs New Purchase
@@ -1778,6 +1788,9 @@ function AssetWizardContent() {
       manufacturer,
       condition,
       poNumber,
+      sapAssetCode,
+      invoiceNumber,
+      invoiceDate,
       vendorName,
       purchaseDate,
       purchaseCost,
@@ -1826,6 +1839,9 @@ function AssetWizardContent() {
     setManufacturer(draft.manufacturer || '');
     setCondition(draft.condition || 'new_purchase');
     setPoNumber(draft.poNumber || '');
+    setSapAssetCode(draft.sapAssetCode || '');
+    setInvoiceNumber(draft.invoiceNumber || '');
+    setInvoiceDate(draft.invoiceDate || '');
     setVendorName(draft.vendorName || '');
     setPurchaseDate(draft.purchaseDate || '');
     setPurchaseCost(draft.purchaseCost || '');
@@ -1991,6 +2007,12 @@ function AssetWizardContent() {
         return;
       }
 
+      if (!sapAssetCode.trim()) {
+        setError('Asset Code (According to SAP) is mandatory. Please enter the SAP Asset Code.');
+        setStep(2);
+        return;
+      }
+
       if (condition === 'new_purchase' && !poNumber.trim()) {
         setError('PO Number is mandatory for Newly Purchased equipment. Please enter a valid Purchase Order number.');
         setStep(2);
@@ -2052,6 +2074,7 @@ function AssetWizardContent() {
       const payload = {
         asset: {
           asset_tag: '', // Empty triggers atomic server-side generation
+          sap_asset_code: sapAssetCode.trim().toUpperCase() || null,
           name: name.trim().toUpperCase() || `${manufacturer} ${model}`.trim().toUpperCase() || (isDamagedMode ? 'DAMAGED EQUIPMENT' : 'MISSING EQUIPMENT'),
           model: model.trim().toUpperCase() || null,
           manufacturer: manufacturer.trim().toUpperCase() || null,
@@ -2061,6 +2084,8 @@ function AssetWizardContent() {
           purchase_date: purchaseDate || null,
           purchase_cost: purchaseCost ? parseFloat(purchaseCost) : null,
           po_number: poNumber.trim().toUpperCase() || null,
+          invoice_number: invoiceNumber.trim().toUpperCase() || null,
+          invoice_date: invoiceDate || null,
           vendor_name: vendorName.trim().toUpperCase() || null,
           warranty_expiry: warrantyExpiry || null,
           amc_vendor: amcVendor.trim().toUpperCase() || null,
@@ -2077,6 +2102,9 @@ function AssetWizardContent() {
               ...getCleanCustomValues(),
               hostname: finalHostname || '',
             },
+            sap_asset_code: sapAssetCode.trim().toUpperCase() || null,
+            invoice_number: invoiceNumber.trim().toUpperCase() || null,
+            invoice_date: invoiceDate || null,
             condition: condition || (poNumber.trim() ? 'new_purchase' : 'existing_asset'),
             hostname: finalHostname,
             remarks: remarks.trim() || null,
@@ -2171,6 +2199,13 @@ function AssetWizardContent() {
       return;
     }
 
+    if (!sapAssetCode.trim()) {
+      setError('Asset Code (According to SAP) is mandatory. Please enter the SAP Asset Code.');
+      setStep(2);
+      scrollToTop();
+      return;
+    }
+
     if (condition === 'new_purchase' && !poNumber.trim()) {
       setError('PO Number is mandatory for Newly Purchased equipment. Please enter a valid Purchase Order number.');
       setStep(2);
@@ -2251,6 +2286,7 @@ function AssetWizardContent() {
       const payload = {
         asset: {
           asset_tag: editId ? assetTag : '', // Empty triggers atomic server-side unique generation with collision retry loop
+          sap_asset_code: sapAssetCode.trim().toUpperCase() || null,
           name: name.trim().toUpperCase() || `${manufacturer} ${model}`.trim().toUpperCase(),
           model: model.trim().toUpperCase() || null,
           manufacturer: manufacturer.trim().toUpperCase() || null,
@@ -2260,6 +2296,8 @@ function AssetWizardContent() {
           purchase_date: purchaseDate || null,
           purchase_cost: purchaseCost ? parseFloat(purchaseCost) : null,
           po_number: poNumber.trim().toUpperCase() || null,
+          invoice_number: invoiceNumber.trim().toUpperCase() || null,
+          invoice_date: invoiceDate || null,
           vendor_name: vendorName.trim().toUpperCase() || null,
           warranty_expiry: warrantyExpiry || null,
           amc_vendor: amcVendor.trim().toUpperCase() || null,
@@ -2275,6 +2313,9 @@ function AssetWizardContent() {
               ...finalCustomValues,
               hostname: hostname.trim().toUpperCase() || '',
             },
+            sap_asset_code: sapAssetCode.trim().toUpperCase() || null,
+            invoice_number: invoiceNumber.trim().toUpperCase() || null,
+            invoice_date: invoiceDate || null,
             condition: condition || (poNumber.trim() ? 'new_purchase' : 'existing_asset'),
             hostname: hostname.trim().toUpperCase() || null,
             remarks: remarks.trim() || null,
@@ -2805,7 +2846,7 @@ function AssetWizardContent() {
               1. BASE IDENTIFICATION
             </h2>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               {/* 1. Manufacturer / Brand */}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Manufacturer / Brand *</label>
@@ -2868,9 +2909,28 @@ function AssetWizardContent() {
                 )}
               </div>
 
-              {/* 4. Asset Code / Tag (Clean - only code) */}
+              {/* 4. Asset Code (According to SAP) - MANDATORY */}
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Asset Code / Tag *</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Asset Code (According to SAP) <span className="text-rose-500 font-bold">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={sapAssetCode}
+                  onChange={handleCapsChange(setSapAssetCode)}
+                  placeholder="e.g. SAP-1002394"
+                  className={`w-full border rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none uppercase transition-colors ${
+                    !sapAssetCode.trim()
+                      ? 'bg-amber-50/40 border-amber-300 focus:border-amber-500 focus:bg-white'
+                      : 'bg-slate-50 border-slate-200 focus:border-blue-500 focus:bg-white'
+                  }`}
+                />
+              </div>
+
+              {/* 5. Asset Code / Tag (Clean - only code) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">AEMS System Tag *</label>
                 <input
                   type="text"
                   disabled
@@ -2946,7 +3006,7 @@ function AssetWizardContent() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Vendor Name */}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Vendor Name</label>
@@ -2976,6 +3036,33 @@ function AssetWizardContent() {
                       ? 'bg-amber-50/50 border-amber-300 focus:border-amber-500'
                       : 'bg-slate-50 border-slate-200 focus:border-blue-500 focus:bg-white'
                   }`}
+                />
+              </div>
+
+              {/* Invoice Number (Optional) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Invoice Number <span className="text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={invoiceNumber}
+                  onChange={handleCapsChange(setInvoiceNumber)}
+                  placeholder="e.g. INV-2024-0012"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none uppercase focus:border-blue-500 focus:bg-white"
+                />
+              </div>
+
+              {/* Invoice Date (Optional) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Invoice Date <span className="text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <input
+                  type="date"
+                  value={invoiceDate}
+                  onChange={(e) => setInvoiceDate(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white cursor-pointer"
                 />
               </div>
 
@@ -3710,6 +3797,12 @@ function AssetWizardContent() {
                     
                     if (!manufacturer.trim()) setManufacturer(effectiveManufacturer);
                     if (!model.trim()) setModel(effectiveModel);
+
+                    if (!sapAssetCode.trim()) {
+                      setError('Asset Code (According to SAP) is mandatory. Please enter the SAP Asset Code in Section 1.');
+                      scrollToTop();
+                      return;
+                    }
 
                     if (condition === 'new_purchase' && !poNumber.trim()) {
                       setError('PO Number is mandatory for Newly Purchased equipment. Please enter a valid PO number in Section 2 above (or select "Existing Asset" if PO is unavailable).');

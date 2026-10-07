@@ -458,6 +458,8 @@ const DEFAULT_DEPT_CATEGORIES: Record<string, string[]> = {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const tag = (asset.asset_tag || '').toLowerCase();
+        const sap = (asset.sap_asset_code || '').toLowerCase();
+        const invoice = (asset.invoice_number || '').toLowerCase();
         const name = (asset.name || '').toLowerCase();
         const serial = (asset.serial_number || '').toLowerCase();
         const model = (asset.model || '').toLowerCase();
@@ -468,6 +470,8 @@ const DEFAULT_DEPT_CATEGORIES: Record<string, string[]> = {
 
         const hit =
           tag.includes(q) ||
+          sap.includes(q) ||
+          invoice.includes(q) ||
           name.includes(q) ||
           serial.includes(q) ||
           model.includes(q) ||
@@ -579,6 +583,7 @@ const DEFAULT_DEPT_CATEGORIES: Record<string, string[]> = {
 
     const headers = [
       'Asset Tag',
+      'SAP Asset Code',
       'Name',
       'Model',
       'Serial Number',
@@ -591,11 +596,14 @@ const DEFAULT_DEPT_CATEGORIES: Record<string, string[]> = {
       'Purchase Cost',
       'Status',
       'PO Number',
+      'Invoice Number',
+      'Invoice Date',
       'Warranty Expiry',
     ];
 
     const rows = filteredAssets.map((a) => [
       `"${a.asset_tag}"`,
+      `"${a.sap_asset_code || ''}"`,
       `"${a.name.replace(/"/g, '""')}"`,
       `"${(a.model || '').replace(/"/g, '""')}"`,
       `"${a.serial_number || ''}"`,
@@ -608,6 +616,8 @@ const DEFAULT_DEPT_CATEGORIES: Record<string, string[]> = {
       a.purchase_cost || 0,
       `"${a.status}"`,
       `"${a.po_number || ''}"`,
+      `"${a.invoice_number || ''}"`,
+      `"${a.invoice_date || ''}"`,
       `"${a.warranty_expiry || ''}"`,
     ]);
 
@@ -1004,6 +1014,11 @@ const DEFAULT_DEPT_CATEGORIES: Record<string, string[]> = {
                             <span className="font-mono font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 group-hover:border-blue-300 group-hover:text-blue-600 transition-colors">
                               {a.asset_tag}
                             </span>
+                            {a.sap_asset_code && (
+                              <span className="font-mono font-black text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200 text-[10px]" title="SAP Asset Code">
+                                SAP: {a.sap_asset_code}
+                              </span>
+                            )}
                             <span className="text-[10px] font-mono text-slate-400">
                               #{a.id.slice(0, 4).toUpperCase()}
                             </span>
