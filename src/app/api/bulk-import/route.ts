@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
         await createAsset(
           {
             asset_tag: String(row.asset_tag).trim(),
+            sap_asset_code: row.sap_asset_code ? String(row.sap_asset_code).trim().toUpperCase() : null,
             serial_number: row.serial_number ? String(row.serial_number).trim() : null,
             name: String(row.name).trim(),
             model: row.model ? String(row.model).trim() : null,
@@ -95,6 +96,8 @@ export async function POST(req: NextRequest) {
             purchase_date: row.purchase_date || null,
             purchase_cost: row.purchase_cost ? Number(row.purchase_cost) : null,
             po_number: row.po_number ? String(row.po_number).trim() : null,
+            invoice_number: row.invoice_number ? String(row.invoice_number).trim().toUpperCase() : null,
+            invoice_date: row.invoice_date || null,
             vendor_name: row.vendor_name ? String(row.vendor_name).trim() : null,
             warranty_expiry: row.warranty_expiry || null,
             current_location_id: loc.id,

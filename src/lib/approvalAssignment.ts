@@ -48,6 +48,7 @@ export async function notifyEmployeeOfAssignment(params: {
     employeeName: employee.full_name,
     empCode: employee.emp_code,
     assetTag: asset.asset_tag,
+    sapAssetCode: asset.sap_asset_code,
     assetName: asset.name,
     assetType: asset.category?.name,
     model: asset.model,

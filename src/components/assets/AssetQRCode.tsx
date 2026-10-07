@@ -93,6 +93,7 @@ export default function AssetQRCode({
             <div class="title">${asset.name}</div>
             <img class="qr" src="${qrDataUrl}" alt="${asset.asset_tag}" />
             <div class="code">${asset.asset_tag}</div>
+            ${asset.sap_asset_code ? `<div class="code" style="font-size: 11px; color: #b45309; margin-top: 2px;">SAP: ${asset.sap_asset_code}</div>` : ''}
             ${asset.serial_number ? `<div class="serial">SN: ${asset.serial_number}</div>` : ''}
             <div class="footer">Property of PG Electroplast Ltd • DO NOT REMOVE</div>
           </div>
@@ -195,8 +196,13 @@ export default function AssetQRCode({
                   className="w-44 h-44 object-contain shadow-xs bg-white p-2 rounded-lg"
                 />
               )}
+              {asset.sap_asset_code && (
+                <span className="text-[11px] font-mono text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 mt-2 font-bold">
+                  SAP Code: {asset.sap_asset_code}
+                </span>
+              )}
               {asset.serial_number && (
-                <span className="text-[11px] font-mono text-slate-500 mt-2 font-medium">
+                <span className="text-[11px] font-mono text-slate-500 mt-1 font-medium">
                   Serial: {asset.serial_number}
                 </span>
               )}

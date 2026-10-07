@@ -199,6 +199,7 @@ export interface InHouseHodMailParams {
   hodEmpCode?: string;
   departmentName: string;
   assetTag: string;
+  sapAssetCode?: string | null;
   assetName: string;
   assetType?: string;
   serialNumber?: string | null;
@@ -219,6 +220,7 @@ export async function sendInHouseHodEmail(p: InHouseHodMailParams): Promise<Send
   });
   const rows: Array<[string, string | null | undefined]> = [
     ['Asset Tag', p.assetTag],
+    ['SAP Asset Code', p.sapAssetCode],
     ['Asset Name', p.assetName],
     ['Asset Type', p.assetType],
     ['Model', p.model],
@@ -395,6 +397,7 @@ export interface AssetAssignedEmployeeMailParams {
   employeeName: string;
   empCode?: string | null;
   assetTag: string;
+  sapAssetCode?: string | null;
   assetName: string;
   assetType?: string | null;
   model?: string | null;
@@ -410,6 +413,7 @@ export interface AssetAssignedEmployeeMailParams {
 export async function sendAssetAssignedEmployeeEmail(p: AssetAssignedEmployeeMailParams): Promise<SendMailResult> {
   const rows = detailRowsHtml([
     ['Asset Tag', p.assetTag],
+    ['SAP Asset Code', p.sapAssetCode],
     ['Asset Name', p.assetName],
     ['Asset Type', p.assetType],
     ['Model', p.model],

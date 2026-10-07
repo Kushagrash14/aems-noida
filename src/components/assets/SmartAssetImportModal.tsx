@@ -53,11 +53,14 @@ interface ParsedImportRow {
   manufacturer?: string;
   model?: string;
   serial_number: string;
+  sap_asset_code?: string;
   hostname?: string;
   purchase_date?: string;
   purchase_cost?: number;
   vendor_name?: string;
   po_number?: string;
+  invoice_number?: string;
+  invoice_date?: string;
   warranty_expiry?: string;
   emp_code?: string;
   emp_name?: string;
@@ -293,6 +296,7 @@ export default function SmartAssetImportModal({
           'Manufacturer / Brand': 'Lenovo',
           'Model': '21AH00BUIN',
           'Serial Number': 'PF3XA001',
+          'Asset Code (According to SAP)': 'SAP-1002394',
           'Processor / CPU': 'Intel Core i7-12700H',
           'RAM Memory': '16 GB DDR4',
           'Storage Capacity': '512 GB NVMe SSD',
@@ -304,6 +308,8 @@ export default function SmartAssetImportModal({
           'Purchase Cost (INR)': 78500,
           'Vendor Name': 'Redington India Ltd',
           'PO Number': 'PO-2024-0012',
+          'Invoice Number (Optional)': 'INV-2024-0012',
+          'Invoice Date (Optional)': '2024-03-15',
           'Warranty Expiry (YYYY-MM-DD)': '2027-03-14',
           'Employee Code (Optional)': 'PG-1001',
           'Employee Full Name (Optional)': 'AMIT SHARMA',
@@ -318,6 +324,7 @@ export default function SmartAssetImportModal({
           'Manufacturer / Brand': 'Dell',
           'Model': 'OptiPlex 7090 MT',
           'Serial Number': 'DL901234',
+          'Asset Code (According to SAP)': 'SAP-1002395',
           'Processor / CPU': 'Intel Core i5-11500',
           'RAM Memory': '16 GB DDR4',
           'Storage Capacity': '1 TB SSD',
@@ -329,6 +336,8 @@ export default function SmartAssetImportModal({
           'Purchase Cost (INR)': 62000,
           'Vendor Name': 'Compucom Systems',
           'PO Number': 'PO-2024-0044',
+          'Invoice Number (Optional)': 'INV-2024-0044',
+          'Invoice Date (Optional)': '2024-01-20',
           'Warranty Expiry (YYYY-MM-DD)': '2027-01-19',
           'Employee Code (Optional)': 'PG-1002',
           'Employee Full Name (Optional)': 'PRIYA PATEL',
@@ -343,6 +352,7 @@ export default function SmartAssetImportModal({
           'Manufacturer / Brand': 'Dell',
           'Model': 'P2422H',
           'Serial Number': 'CN-0M3817',
+          'Asset Code (According to SAP)': 'SAP-1002396',
           'Processor / CPU': '',
           'RAM Memory': '',
           'Storage Capacity': '',
@@ -354,6 +364,8 @@ export default function SmartAssetImportModal({
           'Purchase Cost (INR)': 14500,
           'Vendor Name': 'Compucom Systems',
           'PO Number': 'PO-2024-0062',
+          'Invoice Number (Optional)': 'INV-2024-0062',
+          'Invoice Date (Optional)': '2024-02-10',
           'Warranty Expiry (YYYY-MM-DD)': '2027-02-09',
           'Employee Code (Optional)': '',
           'Employee Full Name (Optional)': '',
@@ -570,6 +582,9 @@ export default function SmartAssetImportModal({
         const purchase_cost = purchaseCostStr ? parseFloat(purchaseCostStr.replace(/[^0-9.]/g, '')) || undefined : undefined;
         const vendor_name = getVal([/^vendor/i, /^supplier/i]);
         const po_number = getVal([/^po.*number/i, /^po.*no/i, /^po$/i]);
+        const sap_asset_code = getVal([/^sap.*asset.*code/i, /^sap.*code/i, /^sap$/i, /^asset.*code.*sap/i]);
+        const invoice_number = getVal([/^invoice.*number/i, /^invoice.*no/i, /^inv.*no/i, /^invoice$/i]);
+        const invoice_date = getVal([/^invoice.*date/i, /^bill.*date/i]);
         const warranty_expiry = getVal([/^warranty.*expiry/i, /^warranty/i]);
         const emp_code = getVal([/^emp.*code/i, /^employee.*code/i, /^emp.*id/i, /^custodian.*code/i]);
         const emp_name = getVal([/^emp.*name/i, /^employee.*name/i, /^custodian.*name/i, /^full.*name/i]);
@@ -648,11 +663,14 @@ export default function SmartAssetImportModal({
           manufacturer,
           model,
           serial_number: cleanSerial,
+          sap_asset_code: sap_asset_code || undefined,
           hostname,
           purchase_date,
           purchase_cost,
           vendor_name,
           po_number,
+          invoice_number: invoice_number || undefined,
+          invoice_date: invoice_date || undefined,
           warranty_expiry,
           emp_code: cleanEmpCode,
           emp_name,
@@ -723,11 +741,14 @@ export default function SmartAssetImportModal({
         manufacturer: r.manufacturer,
         model: r.model,
         serial_number: r.serial_number,
+        sap_asset_code: r.sap_asset_code,
         hostname: r.hostname,
         purchase_date: r.purchase_date,
         purchase_cost: r.purchase_cost,
         vendor_name: r.vendor_name,
         po_number: r.po_number,
+        invoice_number: r.invoice_number,
+        invoice_date: r.invoice_date,
         warranty_expiry: r.warranty_expiry,
         remarks: r.remarks,
         emp_code: r.emp_code,
@@ -1234,7 +1255,12 @@ export default function SmartAssetImportModal({
                               </td>
 
                               <td className="py-1.5 px-2.5 font-mono font-bold text-slate-900 text-[11px]">
-                                {row.serial_number || <span className="text-rose-500 italic">None</span>}
+                                <div>{row.serial_number || <span className="text-rose-500 italic">None</span>}</div>
+                                {row.sap_asset_code && (
+                                  <span className="inline-block mt-0.5 text-[8.5px] font-mono font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                    SAP: {row.sap_asset_code}
+                                  </span>
+                                )}
                               </td>
 
                               <td className="py-1.5 px-2.5">

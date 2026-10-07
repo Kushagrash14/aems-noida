@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
           hodEmpCode: hod.empCode,
           departmentName: hod.departmentName || full.department?.name || 'Department',
           assetTag: full.asset_tag,
+          sapAssetCode: full.sap_asset_code,
           assetName: full.name,
           assetType: full.category?.name,
           serialNumber: full.serial_number,

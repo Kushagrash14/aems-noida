@@ -19,6 +19,7 @@ import type { User } from '@/types/database';
 
 interface ColumnMapping {
   asset_tag: string;
+  sap_asset_code: string;
   name: string;
   category: string;
   serial_number: string;
@@ -28,6 +29,8 @@ interface ColumnMapping {
   purchase_date: string;
   purchase_cost: string;
   po_number: string;
+  invoice_number: string;
+  invoice_date: string;
   vendor_name: string;
 }
 
@@ -51,6 +54,7 @@ export default function BulkImportPage() {
   // Column Mapping
   const [mapping, setMapping] = useState<ColumnMapping>({
     asset_tag: '',
+    sap_asset_code: '',
     name: '',
     category: '',
     serial_number: '',
@@ -60,6 +64,8 @@ export default function BulkImportPage() {
     purchase_date: '',
     purchase_cost: '',
     po_number: '',
+    invoice_number: '',
+    invoice_date: '',
     vendor_name: '',
   });
 
@@ -101,15 +107,18 @@ export default function BulkImportPage() {
         // Smart auto-mapper: matches column names case-insensitively
         const autoMap: ColumnMapping = {
           asset_tag: rawHeaders.find((h) => /tag|asset.*id|barcode/i.test(h)) || '',
+          sap_asset_code: rawHeaders.find((h) => /sap/i.test(h)) || '',
           name: rawHeaders.find((h) => /name|title|description/i.test(h)) || '',
           category: rawHeaders.find((h) => /cat/i.test(h)) || '',
           serial_number: rawHeaders.find((h) => /serial|sn/i.test(h)) || '',
           location: rawHeaders.find((h) => /loc/i.test(h)) || '',
           plant: rawHeaders.find((h) => /plant|unit/i.test(h)) || '',
           department: rawHeaders.find((h) => /dept|department/i.test(h)) || '',
-          purchase_date: rawHeaders.find((h) => /date|purchased/i.test(h)) || '',
+          purchase_date: rawHeaders.find((h) => /purchase.*date|purchased/i.test(h)) || '',
           purchase_cost: rawHeaders.find((h) => /cost|price|amount/i.test(h)) || '',
           po_number: rawHeaders.find((h) => /po/i.test(h)) || '',
+          invoice_number: rawHeaders.find((h) => /invoice.*no|inv.*no|invoice.*num/i.test(h)) || '',
+          invoice_date: rawHeaders.find((h) => /invoice.*date/i.test(h)) || '',
           vendor_name: rawHeaders.find((h) => /vendor|supplier/i.test(h)) || '',
         };
 
@@ -135,6 +144,7 @@ export default function BulkImportPage() {
       // Map raw rows to normalized entity payload
       const payloadRows = rawRows.map((r) => ({
         asset_tag: r[mapping.asset_tag],
+        sap_asset_code: mapping.sap_asset_code ? r[mapping.sap_asset_code] : null,
         name: r[mapping.name],
         category: mapping.category ? r[mapping.category] : null,
         serial_number: mapping.serial_number ? r[mapping.serial_number] : null,
@@ -144,6 +154,8 @@ export default function BulkImportPage() {
         purchase_date: mapping.purchase_date ? r[mapping.purchase_date] : null,
         purchase_cost: mapping.purchase_cost ? r[mapping.purchase_cost] : null,
         po_number: mapping.po_number ? r[mapping.po_number] : null,
+        invoice_number: mapping.invoice_number ? r[mapping.invoice_number] : null,
+        invoice_date: mapping.invoice_date ? r[mapping.invoice_date] : null,
         vendor_name: mapping.vendor_name ? r[mapping.vendor_name] : null,
       }));
 
@@ -294,6 +306,24 @@ export default function BulkImportPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Asset Code (According to SAP) Column
+                </label>
+                <select
+                  value={mapping.sap_asset_code}
+                  onChange={(e) => setMapping({ ...mapping, sap_asset_code: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">-- Ignore / Not in Sheet --</option>
+                  {headers.map((h) => (
+                    <option key={h} value={h}>
+                      {h}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
                   Serial Number Column
                 </label>
                 <select
@@ -364,6 +394,38 @@ export default function BulkImportPage() {
                   ))}
                 </select>
               </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Invoice Number Column</label>
+                <select
+                  value={mapping.invoice_number}
+                  onChange={(e) => setMapping({ ...mapping, invoice_number: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">-- Ignore / Not in Sheet --</option>
+                  {headers.map((h) => (
+                    <option key={h} value={h}>
+                      {h}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Invoice Date Column</label>
+                <select
+                  value={mapping.invoice_date}
+                  onChange={(e) => setMapping({ ...mapping, invoice_date: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">-- Ignore / Not in Sheet --</option>
+                  {headers.map((h) => (
+                    <option key={h} value={h}>
+                      {h}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -377,6 +439,7 @@ export default function BulkImportPage() {
                 <thead className="bg-slate-900 text-slate-400 border-b border-slate-800">
                   <tr>
                     <th className="px-3 py-2">Asset Tag</th>
+                    <th className="px-3 py-2">SAP Asset Code</th>
                     <th className="px-3 py-2">Name</th>
                     <th className="px-3 py-2">Category</th>
                     <th className="px-3 py-2">Department</th>
@@ -387,6 +450,9 @@ export default function BulkImportPage() {
                     <tr key={i}>
                       <td className="px-3 py-2 font-mono text-white">
                         {String(r[mapping.asset_tag] || '—')}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-purple-400">
+                        {String(r[mapping.sap_asset_code] || '—')}
                       </td>
                       <td className="px-3 py-2">
                         {String(r[mapping.name] || '—')}

@@ -134,6 +134,7 @@ function buildPdf(asset: Asset): Buffer {
   section('Identification');
   rowIndex = 0;
   row('Asset Code / Tag', asset.asset_tag);
+  row('SAP Asset Code', asset.sap_asset_code);
   row('Asset Type', displayAssetType(asset));
   row('Manufacturer / Brand', asset.manufacturer);
   row('Model', asset.model);
@@ -158,6 +159,9 @@ function buildPdf(asset: Asset): Buffer {
   section('Purchase & Warranty');
   rowIndex = 0;
   row('Purchase Date', formatDate(asset.purchase_date));
+  row('Invoice Number', asset.invoice_number);
+  row('Invoice Date', formatDate(asset.invoice_date));
+  row('PO Number', asset.po_number);
   row('Vendor', asset.vendor_name);
   row('Warranty Expiry', formatDate(asset.warranty_expiry));
   row('AMC Vendor', asset.amc_vendor);

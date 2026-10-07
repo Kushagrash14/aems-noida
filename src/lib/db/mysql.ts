@@ -93,8 +93,51 @@ export function getPool(): Pool {
   return globalRef.__aems_mysql_pool;
 }
 
+async function ensureAssetSchema(pool: Pool): Promise<void> {
+  try {
+    const [columnRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME AS c
+         FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'assets'`
+    );
+    if (!columnRows || columnRows.length === 0) return; // Table not yet created
+
+    const existing = new Set(columnRows.map((r) => String(r.c).toLowerCase()));
+    const alterClauses: string[] = [];
+
+    if (!existing.has('sap_asset_code')) {
+      alterClauses.push('ADD COLUMN `sap_asset_code` VARCHAR(150) NULL AFTER `asset_tag`');
+    }
+    if (!existing.has('invoice_number')) {
+      alterClauses.push('ADD COLUMN `invoice_number` VARCHAR(150) NULL AFTER `po_number`');
+    }
+    if (!existing.has('invoice_date')) {
+      alterClauses.push('ADD COLUMN `invoice_date` DATE NULL AFTER `invoice_number`');
+    }
+
+    if (alterClauses.length > 0) {
+      await pool.query(`ALTER TABLE \`assets\` ${alterClauses.join(', ')}`);
+      console.log(`[AEMS Database Auto-Migration] Successfully synced columns in MySQL: ${alterClauses.join(', ')}`);
+    }
+
+    // Ensure index exists
+    const [indexRows] = await pool.query<RowDataPacket[]>(
+      `SELECT INDEX_NAME AS i
+         FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'assets' AND INDEX_NAME = 'idx_assets_sap'`
+    );
+    if (!indexRows || indexRows.length === 0) {
+      await pool.query('ALTER TABLE `assets` ADD KEY `idx_assets_sap` (`sap_asset_code`)').catch(() => undefined);
+    }
+  } catch (err) {
+    console.warn('[AEMS Database Auto-Migration] Schema check notice:', err);
+  }
+}
+
 async function loadSchema(): Promise<SchemaMeta> {
   const pool = getPool();
+
+  await ensureAssetSchema(pool);
 
   const [columnRows] = await pool.query<RowDataPacket[]>(
     `SELECT TABLE_NAME AS t, COLUMN_NAME AS c, DATA_TYPE AS d

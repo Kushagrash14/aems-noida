@@ -1115,7 +1115,9 @@ export async function getAssets(filter?: {
       result = result.filter(
         (a) =>
           a.asset_tag.toLowerCase().includes(q) ||
+          (a.sap_asset_code && a.sap_asset_code.toLowerCase().includes(q)) ||
           a.name.toLowerCase().includes(q) ||
+          (a.invoice_number && a.invoice_number.toLowerCase().includes(q)) ||
           (a.serial_number && a.serial_number.toLowerCase().includes(q))
       );
     }
@@ -1150,7 +1152,7 @@ export async function getAssets(filter?: {
   if (filter?.plantId) query = query.eq('current_plant_id', filter.plantId);
   if (filter?.departmentId) query = query.eq('current_department_id', filter.departmentId);
   if (filter?.search) {
-    query = query.or(`asset_tag.ilike.%${filter.search}%,name.ilike.%${filter.search}%,serial_number.ilike.%${filter.search}%`);
+    query = query.or(`asset_tag.ilike.%${filter.search}%,sap_asset_code.ilike.%${filter.search}%,name.ilike.%${filter.search}%,invoice_number.ilike.%${filter.search}%,serial_number.ilike.%${filter.search}%`);
   }
 
   const { data, error } = await query;
@@ -3899,6 +3901,7 @@ export interface BatchImportAssetItem {
   manufacturer?: string;
   model?: string;
   serial_number: string;
+  sap_asset_code?: string;
   hostname?: string;
   processor?: string;
   ram?: string;
@@ -3910,6 +3913,8 @@ export interface BatchImportAssetItem {
   purchase_cost?: number;
   vendor_name?: string;
   po_number?: string;
+  invoice_number?: string;
+  invoice_date?: string;
   warranty_expiry?: string;
   remarks?: string;
   emp_code?: string;
@@ -4116,6 +4121,9 @@ export async function batchImportAssets(
         mac_address: item.mac_address?.trim().toUpperCase() || null,
         ip_address: item.ip_address?.trim().toUpperCase() || null,
       },
+      sap_asset_code: item.sap_asset_code?.trim().toUpperCase() || null,
+      invoice_number: item.invoice_number?.trim().toUpperCase() || null,
+      invoice_date: item.invoice_date || null,
       photos: [],
       documents: [],
       imported_at: now,
@@ -4125,6 +4133,7 @@ export async function batchImportAssets(
     const newAssetObj: Asset = {
       id: assetId,
       asset_tag: assignedTag,
+      sap_asset_code: item.sap_asset_code?.trim().toUpperCase() || null,
       name: item.name?.trim().toUpperCase() || `${item.manufacturer || ''} ${item.model || ''}`.trim().toUpperCase(),
       model: item.model?.trim().toUpperCase() || null,
       manufacturer: item.manufacturer?.trim().toUpperCase() || null,
@@ -4133,6 +4142,8 @@ export async function batchImportAssets(
       purchase_date: item.purchase_date || null,
       purchase_cost: item.purchase_cost || null,
       po_number: item.po_number?.trim().toUpperCase() || null,
+      invoice_number: item.invoice_number?.trim().toUpperCase() || null,
+      invoice_date: item.invoice_date || null,
       vendor_name: item.vendor_name?.trim().toUpperCase() || null,
       warranty_expiry: item.warranty_expiry || null,
       current_location_id: location_id,
@@ -4160,8 +4171,9 @@ export async function batchImportAssets(
       }
     } else {
       const VALID_ASSET_COLUMNS = new Set([
-        'id', 'asset_tag', 'serial_number', 'name', 'model', 'manufacturer',
+        'id', 'asset_tag', 'sap_asset_code', 'serial_number', 'name', 'model', 'manufacturer',
         'category_id', 'purchase_date', 'purchase_cost', 'po_number',
+        'invoice_number', 'invoice_date',
         'vendor_name', 'warranty_expiry', 'amc_vendor', 'amc_expiry',
         'invoice_document_path', 'current_location_id', 'current_plant_id',
         'current_department_id', 'assigned_employee_id', 'status',
