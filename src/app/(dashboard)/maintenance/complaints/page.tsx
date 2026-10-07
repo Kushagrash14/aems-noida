@@ -26,7 +26,23 @@ export default function ComplaintsInboxPage() {
 
 function ComplaintsInboxContent() {
   const searchParams = useSearchParams();
-  const selectedPlant = searchParams.get('plantId') || searchParams.get('plant') || '';
+  const [selectedPlant, setSelectedPlant] = useState<string>(
+    () => searchParams.get('plantId') || searchParams.get('plant') || ''
+  );
+
+  useEffect(() => {
+    setSelectedPlant(searchParams.get('plantId') || searchParams.get('plant') || '');
+  }, [searchParams]);
+
+  useEffect(() => {
+    const handlePlantChanged = (e: Event) => {
+      const custom = e as CustomEvent<{ plantId?: string | null }>;
+      setSelectedPlant(custom.detail?.plantId || '');
+    };
+    window.addEventListener('aems:plant-changed', handlePlantChanged);
+    return () => window.removeEventListener('aems:plant-changed', handlePlantChanged);
+  }, []);
+
   const [complaints, setComplaints] = useState<PMComplaint[]>([]);
   const [loading, setLoading] = useState(true);
 

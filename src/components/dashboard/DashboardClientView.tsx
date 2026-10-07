@@ -111,14 +111,47 @@ export default function DashboardClientView({
     };
   }, []);
 
-  // 1. Read Filter State DIRECTLY from Navbar URL Search Params
-  const selectedLocation = searchParams.get('locationId') || '';
-  const selectedPlant = searchParams.get('plantId') || '';
-  const selectedDepartment = searchParams.get('deptId') || '';
-  const selectedCategory = searchParams.get('categoryId') || '';
-  const selectedStatus = searchParams.get('status') || '';
-  const searchQuery = (searchParams.get('search') || '').toLowerCase().trim();
+  // 1. Read Filter State with instant local state + reactive listeners
+  const [selectedPlant, setSelectedPlant] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const url = new URLSearchParams(window.location.search);
+      return url.get('plantId') || '';
+    }
+    return searchParams.get('plantId') || '';
+  });
+  const [selectedLocation, setSelectedLocation] = useState<string>(() => searchParams.get('locationId') || '');
+  const [selectedDepartment, setSelectedDepartment] = useState<string>(() => searchParams.get('deptId') || '');
+  const [selectedCategory, setSelectedCategory] = useState<string>(() => searchParams.get('categoryId') || '');
+  const [selectedStatus, setSelectedStatus] = useState<string>(() => searchParams.get('status') || '');
+  const [searchQuery, setSearchQuery] = useState<string>(() => (searchParams.get('search') || '').toLowerCase().trim());
 
+  // Synchronize from Next.js router searchParams
+  useEffect(() => {
+    const p = searchParams.get('plantId') || '';
+    setSelectedPlant(p);
+    setSelectedLocation(searchParams.get('locationId') || '');
+    setSelectedDepartment(searchParams.get('deptId') || '');
+    setSelectedCategory(searchParams.get('categoryId') || '');
+    setSelectedStatus(searchParams.get('status') || '');
+    setSearchQuery((searchParams.get('search') || '').toLowerCase().trim());
+  }, [searchParams]);
+
+  // Synchronize instantly from Navbar custom event (0ms instantaneous reactivity!)
+  useEffect(() => {
+    const handlePlantChanged = (e: Event) => {
+      const custom = e as CustomEvent<{ plantId?: string | null }>;
+      const nextId = custom.detail?.plantId || '';
+      setSelectedPlant(nextId);
+    };
+    window.addEventListener('aems:plant-changed', handlePlantChanged);
+    return () => window.removeEventListener('aems:plant-changed', handlePlantChanged);
+  }, []);
+
+  // Matched plant object to support ID, Name, or Code comparisons
+  const selectedPlantObj = useMemo(() => {
+    if (!selectedPlant) return null;
+    return plants.find((p) => p.id === selectedPlant || p.name === selectedPlant || (p.code && p.code === selectedPlant));
+  }, [plants, selectedPlant]);
 
   // 2. Filtered Assets Pipeline — Fully Synced with Navbar
   const filteredAssets = useMemo(() => {
@@ -131,11 +164,22 @@ export default function DashboardClientView({
         if (!matchesLoc) return false;
       }
 
-      // Plant Filter
+      // Plant Filter (Comprehensive match by ID, Name, and Code)
       if (selectedPlant) {
+        const rawPlantId = asset.current_plant_id || (asset as any).plant_id || asset.plant?.id;
+        const rawPlantName = asset.plant?.name;
         const matchesPlant =
-          asset.current_plant_id === selectedPlant ||
-          (asset.plant && asset.plant.id === selectedPlant);
+          rawPlantId === selectedPlant ||
+          rawPlantName === selectedPlant ||
+          Boolean(
+            selectedPlantObj && (
+              rawPlantId === selectedPlantObj.id ||
+              rawPlantId === selectedPlantObj.name ||
+              (selectedPlantObj.code && rawPlantId === selectedPlantObj.code) ||
+              rawPlantName === selectedPlantObj.name ||
+              (selectedPlantObj.code && rawPlantName === selectedPlantObj.code)
+            )
+          );
         if (!matchesPlant) return false;
       }
 
@@ -182,14 +226,23 @@ export default function DashboardClientView({
 
       return true;
     });
-  }, [assets, selectedLocation, selectedPlant, selectedDepartment, selectedCategory, selectedStatus, searchQuery]);
+  }, [assets, selectedLocation, selectedPlant, selectedPlantObj, selectedDepartment, selectedCategory, selectedStatus, searchQuery]);
 
   // Filter complaints strictly matching selected plant and facility scope
   const filteredComplaints = useMemo(() => {
     return complaints.filter((c) => {
       if (selectedPlant) {
         const pId = c.machine?.plant_id;
-        if (pId && pId !== selectedPlant) return false;
+        const matches =
+          pId === selectedPlant ||
+          Boolean(
+            selectedPlantObj && (
+              pId === selectedPlantObj.id ||
+              pId === selectedPlantObj.name ||
+              (selectedPlantObj.code && pId === selectedPlantObj.code)
+            )
+          );
+        if (!matches) return false;
       }
       if (selectedLocation) {
         const lId = c.machine?.location_id;
@@ -201,14 +254,26 @@ export default function DashboardClientView({
       }
       return true;
     });
-  }, [complaints, selectedPlant, selectedLocation, selectedDepartment]);
+  }, [complaints, selectedPlant, selectedPlantObj, selectedLocation, selectedDepartment]);
 
   // Filter damage reports strictly matching selected plant and facility scope
   const filteredDamageReports = useMemo(() => {
     return damageReports.filter((d) => {
       if (selectedPlant) {
-        const pId = d.asset?.current_plant_id || d.asset?.plant?.id;
-        if (pId && pId !== selectedPlant) return false;
+        const pId = d.asset?.current_plant_id || (d.asset as any)?.plant_id || d.asset?.plant?.id;
+        const pName = d.asset?.plant?.name;
+        const matches =
+          pId === selectedPlant ||
+          pName === selectedPlant ||
+          Boolean(
+            selectedPlantObj && (
+              pId === selectedPlantObj.id ||
+              pId === selectedPlantObj.name ||
+              (selectedPlantObj.code && pId === selectedPlantObj.code) ||
+              pName === selectedPlantObj.name
+            )
+          );
+        if (!matches) return false;
       }
       if (selectedLocation) {
         const lId = d.asset?.current_location_id || d.asset?.location?.id;
@@ -220,7 +285,7 @@ export default function DashboardClientView({
       }
       return true;
     });
-  }, [damageReports, selectedPlant, selectedLocation, selectedDepartment]);
+  }, [damageReports, selectedPlant, selectedPlantObj, selectedLocation, selectedDepartment]);
 
   return (
     <div className="antialiased font-sans pb-10">

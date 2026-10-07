@@ -236,17 +236,15 @@ function NavbarContent({ user, scope }: NavbarProps) {
       const currentPath = window.location.pathname;
       const newUrl = qs ? `${currentPath}?${qs}` : currentPath;
 
-      // Fast synchronous update in browser history
-      window.history.replaceState(null, '', newUrl);
-
-      // Transition Next.js route in background without locking UI
+      // Transition Next.js route with native history and searchParams update
       startTransition(() => {
         router.replace(newUrl, { scroll: false });
       });
 
-      // Dispatch real-time global event for instant reactivity
+      // Dispatch real-time global event for instant 0ms reactivity
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('aems:plant-changed', { detail: { plantId: updates.plantId } }));
+        const activePlantId = updates.plantId !== undefined ? (updates.plantId || '') : (params.get('plantId') || '');
+        window.dispatchEvent(new CustomEvent('aems:plant-changed', { detail: { plantId: activePlantId } }));
       }
     },
     [router]

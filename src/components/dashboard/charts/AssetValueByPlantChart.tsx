@@ -24,10 +24,18 @@ export default function AssetValueByPlantChart({ assets, plants }: AssetValueByP
     const live = assets.filter((a) => a.status !== 'scrapped');
     const sum = (list: Asset[]) => list.reduce((s, a) => s + costOf(a), 0);
 
+    const isPlantMatch = (a: Asset, p: Plant) =>
+      a.current_plant_id === p.id ||
+      (a as any).plant_id === p.id ||
+      a.plant?.id === p.id ||
+      a.current_plant_id === p.name ||
+      (p.code ? a.current_plant_id === p.code : false) ||
+      (a.plant?.name ? a.plant.name === p.name : false);
+
     const groups: BarGroup[] = [...plants]
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((p) => {
-        const list = live.filter((a) => a.current_plant_id === p.id);
+        const list = live.filter((a) => isPlantMatch(a, p));
         const total = sum(list);
         const inUse = sum(list.filter((a) => a.status === 'in_service'));
         return {
@@ -53,9 +61,14 @@ export default function AssetValueByPlantChart({ assets, plants }: AssetValueByP
 
   const handleBarClick = (plantId: string, key: string) => {
     const plant = plants.find((p) => p.id === plantId);
-    const list = assets.filter(
-      (a) => a.current_plant_id === plantId && a.status !== 'scrapped' && (key === 'total' || a.status === 'in_service')
-    );
+    const list = assets.filter((a) => {
+      const match =
+        a.current_plant_id === plantId ||
+        (a as any).plant_id === plantId ||
+        a.plant?.id === plantId ||
+        (plant && (a.current_plant_id === plant.name || (plant.code && a.current_plant_id === plant.code)));
+      return match && a.status !== 'scrapped' && (key === 'total' || a.status === 'in_service');
+    });
     const value = list.reduce((s, a) => s + costOf(a), 0);
     openAssets(`${plant?.name || 'Plant'} — ${key === 'total' ? 'Total Value' : 'In-Use Value'}`, list, `${list.length} assets worth ${formatShortRupee(value)}`);
   };

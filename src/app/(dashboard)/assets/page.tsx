@@ -92,6 +92,17 @@ function AssetsDirectoryContent() {
     if (searchParam) setSearchQuery(searchParam);
   }, [searchParams]);
 
+  // Synchronize instantly from Navbar plant-changed custom event
+  useEffect(() => {
+    const handlePlantChanged = (e: Event) => {
+      const custom = e as CustomEvent<{ plantId?: string | null }>;
+      const nextId = custom.detail?.plantId || '';
+      setSelectedPlant(nextId);
+    };
+    window.addEventListener('aems:plant-changed', handlePlantChanged);
+    return () => window.removeEventListener('aems:plant-changed', handlePlantChanged);
+  }, []);
+
   // Transfer modal state
   const [transferringAsset, setTransferringAsset] = useState<Asset | null>(null);
   const [toDepartmentId, setToDepartmentId] = useState('');
@@ -402,12 +413,23 @@ const DEFAULT_DEPT_CATEGORIES: Record<string, string[]> = {
         if (!matchesLoc) return false;
       }
 
-      // 2. Plant Filter
+      // 2. Plant Filter (Comprehensive match by ID, Name, and Code)
       if (selectedPlant) {
+        const rawPlantId = asset.current_plant_id || (asset as any).plant_id || asset.plant?.id;
+        const rawPlantName = asset.plant?.name;
+        const selectedPlantObj = plants.find((p) => p.id === selectedPlant || p.name === selectedPlant || (p.code && p.code === selectedPlant));
         const matchesPlt =
-          asset.current_plant_id === selectedPlant ||
-          asset.plant?.id === selectedPlant ||
-          asset.plant?.name === selectedPlant;
+          rawPlantId === selectedPlant ||
+          rawPlantName === selectedPlant ||
+          Boolean(
+            selectedPlantObj && (
+              rawPlantId === selectedPlantObj.id ||
+              rawPlantId === selectedPlantObj.name ||
+              (selectedPlantObj.code && rawPlantId === selectedPlantObj.code) ||
+              rawPlantName === selectedPlantObj.name ||
+              (selectedPlantObj.code && rawPlantName === selectedPlantObj.code)
+            )
+          );
         if (!matchesPlt) return false;
       }
 

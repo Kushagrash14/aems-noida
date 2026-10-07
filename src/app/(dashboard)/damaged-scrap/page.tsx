@@ -28,7 +28,23 @@ type ActiveTab = 'damaged' | 'missing' | 'scrap' | 'resolved';
 
 function DamagedScrapContent() {
   const searchParams = useSearchParams();
-  const selectedPlant = searchParams.get('plantId') || searchParams.get('plant') || '';
+  const [selectedPlant, setSelectedPlant] = useState<string>(
+    () => searchParams.get('plantId') || searchParams.get('plant') || ''
+  );
+
+  useEffect(() => {
+    setSelectedPlant(searchParams.get('plantId') || searchParams.get('plant') || '');
+  }, [searchParams]);
+
+  useEffect(() => {
+    const handlePlantChanged = (e: Event) => {
+      const custom = e as CustomEvent<{ plantId?: string | null }>;
+      setSelectedPlant(custom.detail?.plantId || '');
+    };
+    window.addEventListener('aems:plant-changed', handlePlantChanged);
+    return () => window.removeEventListener('aems:plant-changed', handlePlantChanged);
+  }, []);
+
   const [reports, setReports] = useState<DamageScrapReport[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);

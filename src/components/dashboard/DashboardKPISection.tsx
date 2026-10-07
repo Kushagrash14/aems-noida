@@ -45,26 +45,17 @@ export default function DashboardKPISection({
   onAssetUpdated,
 }: DashboardKPISectionProps) {
   const [activeModal, setActiveModal] = useState<KPIType | null>(null);
-  const [currentAssets, setCurrentAssets] = useState<Asset[]>(assets);
-
-  // Sync state if initial props change
-  useEffect(() => {
-    setCurrentAssets(assets);
-  }, [assets]);
 
   // Handle live updates from modal (assignment / de-assignment)
   const handleAssetUpdated = (updatedAsset: Asset) => {
-    setCurrentAssets((prev) =>
-      prev.map((a) => (a.id === updatedAsset.id ? updatedAsset : a))
-    );
     onAssetUpdated?.(updatedAsset);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('aems:asset-updated', { detail: updatedAsset }));
     }
   };
 
-  // Compute KPI Counts & Total Valuation
-  const activeAssets = currentAssets.filter((a) => !a.is_deleted);
+  // Compute KPI Counts & Total Valuation directly from filtered assets (0ms instantaneous!)
+  const activeAssets = assets.filter((a) => !a.is_deleted);
   const totalAssetsCount = activeAssets.length;
   // Assigned: only assets that have an actual employee custodian
   const assignedCount = activeAssets.filter(
@@ -342,7 +333,7 @@ export default function DashboardKPISection({
           isOpen={Boolean(activeModal)}
           onClose={() => setActiveModal(null)}
           kpiType={activeModal}
-          assets={currentAssets}
+          assets={assets}
           onAssetUpdated={handleAssetUpdated}
           complaints={complaints}
           damageReports={damageReports}

@@ -51,14 +51,23 @@ export default function AssetPlantChart({ assets, plants }: AssetPlantChartProps
   const assetsByPlant = useMemo(() => {
     const map = new Map<string, Asset[]>();
     assets.forEach((a) => {
-      const id = a.current_plant_id || a.plant?.id;
+      const matchedP = sortedPlants.find(
+        (p) =>
+          p.id === a.current_plant_id ||
+          p.id === (a as any).plant_id ||
+          p.id === a.plant?.id ||
+          p.name === a.current_plant_id ||
+          (p.code && p.code === a.current_plant_id) ||
+          (a.plant?.name && a.plant.name === p.name)
+      );
+      const id = matchedP?.id || a.current_plant_id || a.plant?.id;
       if (!id) return;
       const list = map.get(id) || [];
       list.push(a);
       map.set(id, list);
     });
     return map;
-  }, [assets]);
+  }, [assets, sortedPlants]);
 
   const scopedAssets = useMemo(
     () => (plantId === 'all' ? sortedPlants.flatMap((p) => assetsByPlant.get(p.id) || []) : assetsByPlant.get(plantId) || []),
