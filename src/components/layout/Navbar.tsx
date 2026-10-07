@@ -282,14 +282,13 @@ function NavbarContent({ user, scope }: NavbarProps) {
   const activePltObj = plants.find((p) => p.id === localPlant) || PLANTS_STATIC.find((p) => p.id === localPlant);
   const pltDisplay = activePltObj
     ? activePltObj.name
-    : (!isItAdmin && userAllowedPlants.length === 1 ? (userAllowedPlants[0]?.name || 'Assigned Plant') : 'All Plants');
+    : 'All Plants';
 
   const handleDirectPlantChange = (pltId: string) => {
     setLocalPlant(pltId);
-    const matchedPlant = plants.find((p) => p.id === pltId);
     updateUrlParams({
       plantId: pltId || null,
-      locationId: matchedPlant?.location_id || null,
+      locationId: null,
     });
   };
 
@@ -406,17 +405,12 @@ function NavbarContent({ user, scope }: NavbarProps) {
                 className="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer pr-4 appearance-none [&>option]:bg-slate-900 [&>option]:text-white"
                 title="Filter all data by Production Plant"
               >
-                <option value="">
-                  {isItAdmin ? 'All Plants' : `All Assigned Plants (${userAllowedPlants.length})`}
-                </option>
-                {userAllowedPlants.map((p) => {
-                  const code = 'code' in p && (p as any).code ? (p as any).code : '';
-                  return (
-                    <option key={p.id} value={p.id}>
-                      {p.name} {code && code !== p.name ? `(${code})` : ''}
-                    </option>
-                  );
-                })}
+                <option value="">All Plants</option>
+                {userAllowedPlants.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
               </select>
               <ChevronDown className="w-3 h-3 text-slate-400 pointer-events-none -ml-3" />
             </div>

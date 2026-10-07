@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import {
   Asset,
   Category,
@@ -27,7 +27,6 @@ import { DrillDownApi, DrillDownContext } from './charts/DrillDownContext';
 import DashboardKPIModal from './DashboardKPIModal';
 
 type DrillDownState = { title: string; subtitle?: string; assets: Asset[] };
-import { Filter, X, RotateCcw, ShieldCheck } from 'lucide-react';
 
 interface DashboardClientViewProps {
   initialAssets: Asset[];
@@ -52,7 +51,6 @@ export default function DashboardClientView({
   user,
   scope,
 }: DashboardClientViewProps) {
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   // Local live state initialized from server payload
@@ -121,41 +119,6 @@ export default function DashboardClientView({
   const selectedStatus = searchParams.get('status') || '';
   const searchQuery = (searchParams.get('search') || '').toLowerCase().trim();
 
-  // Helper to remove individual filter or clear all
-  const updateUrlParams = (updates: Record<string, string | null>) => {
-    const params = new URLSearchParams(window.location.search);
-    Object.entries(updates).forEach(([key, val]) => {
-      if (val === null || val === '' || val === 'ALL') {
-        params.delete(key);
-      } else {
-        params.set(key, val);
-      }
-    });
-    const qs = params.toString();
-    const currentPath = window.location.pathname;
-    router.replace(qs ? `${currentPath}?${qs}` : currentPath, { scroll: false });
-  };
-
-  const handleClearAllFilters = () => {
-    updateUrlParams({
-      locationId: null,
-      plantId: null,
-      deptId: null,
-      categoryId: null,
-      status: null,
-      search: null,
-    });
-  };
-
-  // Human-readable labels for active filter chips
-  const activeLoc = locations.find((l) => l.id === selectedLocation);
-  const activePlt = plants.find((p) => p.id === selectedPlant);
-  const activeDept = departments.find((d) => d.id === selectedDepartment);
-  const activeCat = categories.find((c) => c.id === selectedCategory);
-
-  const hasActiveFilters = Boolean(
-    selectedLocation || selectedPlant || selectedDepartment || selectedCategory || (selectedStatus && selectedStatus !== 'ALL') || searchQuery
-  );
 
   // 2. Filtered Assets Pipeline — Fully Synced with Navbar
   const filteredAssets = useMemo(() => {
@@ -277,105 +240,6 @@ export default function DashboardClientView({
 
       {/* 2. Scrolling Analytics & Visualizations Container */}
       <div className="pt-3.5 space-y-4">
-        {/* Synced Navbar Filter Scope Indicator Bar */}
-        {hasActiveFilters && (
-          <div className="flex items-center justify-between gap-2 p-2 bg-blue-50/80 border border-blue-200/80 rounded-xl text-xs text-blue-900 shadow-2xs animate-in fade-in duration-150">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[10px] font-black uppercase text-blue-700 tracking-wider flex items-center gap-1">
-                <Filter className="w-3 h-3" />
-                <span>Filters:</span>
-              </span>
-
-              {activeLoc && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-200 text-[11px] font-bold text-slate-800">
-                  <span>Location: {activeLoc.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => updateUrlParams({ locationId: null, plantId: null })}
-                    className="text-slate-400 hover:text-rose-600"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-
-              {activePlt && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-200 text-[11px] font-bold text-slate-800">
-                  <span>Plant: {activePlt.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => updateUrlParams({ plantId: null })}
-                    className="text-slate-400 hover:text-rose-600"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-
-              {activeDept && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-200 text-[11px] font-bold text-slate-800">
-                  <span>Department: {activeDept.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => updateUrlParams({ deptId: null })}
-                    className="text-slate-400 hover:text-rose-600"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-
-              {activeCat && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-200 text-[11px] font-bold text-slate-800">
-                  <span>Category: {activeCat.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => updateUrlParams({ categoryId: null })}
-                    className="text-slate-400 hover:text-rose-600"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-
-              {selectedStatus && selectedStatus !== 'ALL' && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-200 text-[11px] font-bold text-slate-800 uppercase">
-                  <span>Status: {selectedStatus.replace(/_/g, ' ')}</span>
-                  <button
-                    type="button"
-                    onClick={() => updateUrlParams({ status: null })}
-                    className="text-slate-400 hover:text-rose-600"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-
-              {searchQuery && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-blue-200 text-[11px] font-bold text-slate-800">
-                  <span>Search: &ldquo;{searchQuery}&rdquo;</span>
-                  <button
-                    type="button"
-                    onClick={() => updateUrlParams({ search: null })}
-                    className="text-slate-400 hover:text-rose-600"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={handleClearAllFilters}
-              className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer shrink-0 ml-2"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span>Clear All</span>
-            </button>
-          </div>
-        )}
-
         <DrillDownContext.Provider value={drillDownApi}>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 md:[&>*:last-child]:col-span-2 xl:[&>*:last-child]:col-span-1 gap-4.5 relative z-10 items-stretch">
           <AssetPlantChart assets={filteredAssets} plants={plants} />
