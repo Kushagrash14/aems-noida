@@ -148,6 +148,7 @@ function SettingsContent() {
   const [userRole, setUserRole] = useState<'it_admin' | 'admin' | 'hr' | 'user'>('user');
   const [userLocationId, setUserLocationId] = useState('');
   const [userPlantId, setUserPlantId] = useState('');
+  const [userPlantIds, setUserPlantIds] = useState<string[]>([]);
   const [userDeptId, setUserDeptId] = useState('');
   const [userSubDept, setUserSubDept] = useState('');
   const [userCanEdit, setUserCanEdit] = useState(true);
@@ -166,7 +167,13 @@ function SettingsContent() {
     setUserPhone('');
     setUserRole(isFacilityAdmin ? 'user' : 'it_admin');
     setUserLocationId(isFacilityAdmin ? (currentUser?.location_id || '') : '');
-    setUserPlantId(isFacilityAdmin ? (currentUser?.plant_id || '') : '');
+    const initialPlantIds = isFacilityAdmin
+      ? (currentUser?.scope?.plant_ids && currentUser.scope.plant_ids.length > 0
+          ? currentUser.scope.plant_ids
+          : (currentUser?.plant_id ? [currentUser.plant_id] : []))
+      : [];
+    setUserPlantId(initialPlantIds[0] || (isFacilityAdmin ? (currentUser?.plant_id || '') : ''));
+    setUserPlantIds(initialPlantIds);
     setUserDeptId(isFacilityAdmin ? (currentUser?.department_id || '') : '');
     setUserSubDept(isFacilityAdmin ? (currentUser?.sub_department || '') : '');
     setUserCanEdit(true);
@@ -181,8 +188,12 @@ function SettingsContent() {
     setUserEmail(u.email || '');
     setUserPhone(u.phone || '');
     setUserRole(u.role);
-    setUserLocationId(u.location_id || u.scope?.location_ids?.[0] || '');
-    setUserPlantId(u.plant_id || u.scope?.plant_ids?.[0] || '');
+    const initialPlantIds = u.scope?.plant_ids && u.scope.plant_ids.length > 0
+      ? u.scope.plant_ids
+      : (u.plant_id ? [u.plant_id] : []);
+    setUserPlantId(u.plant_id || initialPlantIds[0] || '');
+    setUserPlantIds(initialPlantIds);
+    setUserLocationId(initialPlantIds.length > 1 ? '' : (u.location_id || u.scope?.location_ids?.[0] || ''));
     setUserDeptId(u.department_id || u.scope?.department_ids?.[0] || '');
     setUserSubDept(u.sub_department || u.scope?.sub_department || '');
     setUserCanEdit(u.scope?.can_edit ?? true);
@@ -198,8 +209,26 @@ function SettingsContent() {
 
     const resolvedRole = isFacilityAdmin ? 'user' : userRole;
     const isItAdmin = resolvedRole === 'it_admin';
-    const resolvedLoc = isFacilityAdmin ? (currentUser?.location_id || userLocationId || null) : (isItAdmin ? null : (userLocationId || null));
-    const resolvedPlt = isFacilityAdmin ? (currentUser?.plant_id || userPlantId || null) : (isItAdmin ? null : (userPlantId || null));
+    const effectivePlantIds = isItAdmin
+      ? null
+      : (userPlantIds.length > 0 ? userPlantIds : (userPlantId ? [userPlantId] : (currentUser?.plant_id ? [currentUser.plant_id] : null)));
+
+    if (!isItAdmin && (!effectivePlantIds || effectivePlantIds.length === 0)) {
+      setUserModalError('Please select at least one Production Plant for this user.');
+      return;
+    }
+
+    const primaryPlantId = isItAdmin ? null : (effectivePlantIds?.[0] || null);
+    const primaryPlant = plants.find((p) => p.id === primaryPlantId);
+    const resolvedLoc = isFacilityAdmin
+      ? (currentUser?.location_id || userLocationId || null)
+      : (isItAdmin ? null : (userLocationId || primaryPlant?.location_id || null));
+    const derivedLocIds = isItAdmin
+      ? null
+      : (effectivePlantIds && effectivePlantIds.length > 0
+          ? Array.from(new Set(effectivePlantIds.map((pid) => plants.find((p) => p.id === pid)?.location_id).filter(Boolean) as string[]))
+          : (resolvedLoc ? [resolvedLoc] : null));
+    const effectiveLoc = resolvedLoc || (derivedLocIds && derivedLocIds.length > 0 ? derivedLocIds[0] : null);
     const resolvedDept = isFacilityAdmin ? (currentUser?.department_id || userDeptId || null) : (isItAdmin ? null : (userDeptId || null));
 
     setSavingUser(true);
@@ -214,13 +243,13 @@ function SettingsContent() {
           email: userEmail.trim(),
           phone: userPhone.trim() || null,
           role: resolvedRole,
-          location_id: resolvedLoc,
-          plant_id: resolvedPlt,
+          location_id: effectiveLoc,
+          plant_id: primaryPlantId,
           department_id: resolvedDept,
           sub_department: isItAdmin ? null : (userSubDept.trim() || 'None'),
           can_edit: isItAdmin ? true : userCanEdit,
-          location_ids: isItAdmin ? null : (resolvedLoc ? [resolvedLoc] : null),
-          plant_ids: isItAdmin ? null : (resolvedPlt ? [resolvedPlt] : null),
+          location_ids: isItAdmin ? null : (derivedLocIds && derivedLocIds.length > 0 ? derivedLocIds : (effectiveLoc ? [effectiveLoc] : null)),
+          plant_ids: effectivePlantIds,
           department_ids: isItAdmin ? null : (resolvedDept ? [resolvedDept] : null),
         }),
       });
@@ -253,8 +282,24 @@ function SettingsContent() {
 
     const resolvedRole = isFacilityAdmin ? 'user' : userRole;
     const isItAdmin = resolvedRole === 'it_admin';
-    const resolvedLoc = isFacilityAdmin ? (currentUser?.location_id || userLocationId || null) : (isItAdmin ? null : (userLocationId || null));
-    const resolvedPlt = isFacilityAdmin ? (currentUser?.plant_id || userPlantId || null) : (isItAdmin ? null : (userPlantId || null));
+    const effectivePlantIds = isItAdmin
+      ? null
+      : (userPlantIds.length > 0 ? userPlantIds : (userPlantId ? [userPlantId] : null));
+
+    if (!isItAdmin && (!effectivePlantIds || effectivePlantIds.length === 0)) {
+      setUserModalError('Please select at least one Production Plant for this user.');
+      return;
+    }
+
+    const primaryPlantId = isItAdmin ? null : (effectivePlantIds?.[0] || null);
+    const primaryPlant = plants.find((p) => p.id === primaryPlantId);
+    const resolvedLoc = isFacilityAdmin ? (currentUser?.location_id || userLocationId || null) : (isItAdmin ? null : (userLocationId || primaryPlant?.location_id || null));
+    const derivedLocIds = isItAdmin
+      ? null
+      : (effectivePlantIds && effectivePlantIds.length > 0
+          ? Array.from(new Set(effectivePlantIds.map((pid) => plants.find((p) => p.id === pid)?.location_id).filter(Boolean) as string[]))
+          : (resolvedLoc ? [resolvedLoc] : null));
+    const effectiveLoc = resolvedLoc || (derivedLocIds && derivedLocIds.length > 0 ? derivedLocIds[0] : null);
     const resolvedDept = isFacilityAdmin ? (currentUser?.department_id || userDeptId || null) : (isItAdmin ? null : (userDeptId || null));
 
     setSavingUser(true);
@@ -270,13 +315,13 @@ function SettingsContent() {
           email: userEmail.trim(),
           phone: userPhone.trim() || null,
           targetRole: resolvedRole,
-          location_id: resolvedLoc,
-          plant_id: resolvedPlt,
+          location_id: effectiveLoc,
+          plant_id: primaryPlantId,
           department_id: resolvedDept,
           sub_department: isItAdmin ? null : (userSubDept.trim() || 'None'),
           can_edit: isItAdmin ? true : userCanEdit,
-          location_ids: isItAdmin ? null : (resolvedLoc ? [resolvedLoc] : null),
-          plant_ids: isItAdmin ? null : (resolvedPlt ? [resolvedPlt] : null),
+          location_ids: isItAdmin ? null : (derivedLocIds && derivedLocIds.length > 0 ? derivedLocIds : (effectiveLoc ? [effectiveLoc] : null)),
+          plant_ids: effectivePlantIds,
           department_ids: isItAdmin ? null : (resolvedDept ? [resolvedDept] : null),
         }),
       });
@@ -1362,8 +1407,17 @@ function SettingsContent() {
                                 <div className="font-semibold text-slate-800">
                                   {userLoc?.name || (u.scope?.location_ids?.length ? `${u.scope.location_ids.length} Location(s)` : 'All Locations')}
                                 </div>
-                                <div className="text-[11px] text-slate-400">
-                                  {userPlt?.name || 'All Plants'}
+                                <div className="text-[11px] text-slate-500 mt-0.5">
+                                  {u.scope?.plant_ids && u.scope.plant_ids.length > 1 ? (
+                                    <span
+                                      className="inline-flex items-center gap-1 font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded text-[10px]"
+                                      title={plants.filter((p) => u.scope?.plant_ids?.includes(p.id)).map((p) => p.name).join(', ')}
+                                    >
+                                      {u.scope.plant_ids.length} Plants: {plants.filter((p) => u.scope?.plant_ids?.includes(p.id)).map((p) => p.code || p.name).join(', ')}
+                                    </span>
+                                  ) : (
+                                    userPlt?.name || 'All Plants'
+                                  )}
                                 </div>
                               </>
                             )}
@@ -2415,18 +2469,16 @@ function SettingsContent() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Location *
+                        Location (Filter)
                       </label>
                       <select
-                        required
                         value={userLocationId}
                         onChange={(e) => {
                           setUserLocationId(e.target.value);
-                          setUserPlantId('');
                         }}
                         className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer"
                       >
-                        <option value="">-- Select Location --</option>
+                        <option value="">-- All Locations / Any --</option>
                         {locations.map((loc) => (
                           <option key={loc.id} value={loc.id}>
                             {loc.name} ({loc.code})
@@ -2435,27 +2487,6 @@ function SettingsContent() {
                       </select>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Production Plant *
-                      </label>
-                      <select
-                        required
-                        value={userPlantId}
-                        onChange={(e) => setUserPlantId(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer"
-                      >
-                        <option value="">-- Select Plant --</option>
-                        {availablePlantsForUser.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} ({p.code})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
                         Department *
@@ -2474,19 +2505,121 @@ function SettingsContent() {
                         ))}
                       </select>
                     </div>
+                  </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Sub Department (or "None")
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Sub Department (or "None")
+                    </label>
+                    <input
+                      type="text"
+                      value={userSubDept}
+                      onChange={(e) => setUserSubDept(e.target.value)}
+                      placeholder="e.g. Line 3 or None"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <Building className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Assigned Production Plant(s) *</span>
+                        {userPlantIds.length > 0 && (
+                          <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded-full">
+                            {userPlantIds.length} Selected
+                          </span>
+                        )}
                       </label>
-                      <input
-                        type="text"
-                        value={userSubDept}
-                        onChange={(e) => setUserSubDept(e.target.value)}
-                        placeholder="e.g. Line 3 or None"
-                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const allIds = availablePlantsForUser.map((p) => p.id);
+                            setUserPlantIds(allIds);
+                            if (allIds.length > 0) setUserPlantId(allIds[0]);
+                          }}
+                          className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                        >
+                          Select All
+                        </button>
+                        <span className="text-slate-300 text-xs">|</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUserPlantIds([]);
+                            setUserPlantId('');
+                          }}
+                          className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 hover:underline cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      </div>
                     </div>
+
+                    <div className="border border-slate-200 rounded-xl p-2.5 bg-slate-50/70 max-h-44 overflow-y-auto">
+                      {availablePlantsForUser.length === 0 ? (
+                        <p className="text-xs text-slate-400 py-3 text-center">
+                          No plants found for this selection.
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {availablePlantsForUser.map((p) => {
+                            const isChecked = userPlantIds.includes(p.id) || userPlantId === p.id;
+                            const plantLoc = locations.find((l) => l.id === p.location_id);
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => {
+                                  let next: string[];
+                                  if (isChecked) {
+                                    next = userPlantIds.filter((id) => id !== p.id);
+                                    if (userPlantId === p.id) {
+                                      setUserPlantId(next[0] || '');
+                                    }
+                                  } else {
+                                    next = [...userPlantIds.filter((id) => id !== p.id), p.id];
+                                    if (!userPlantId) setUserPlantId(p.id);
+                                  }
+                                  setUserPlantIds(next);
+                                }}
+                                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-xs transition border cursor-pointer ${
+                                  isChecked
+                                    ? 'bg-blue-50 border-blue-400 text-blue-900 font-medium shadow-xs'
+                                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100/80 hover:border-slate-300'
+                                }`}
+                              >
+                                <div
+                                  className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border transition ${
+                                    isChecked
+                                      ? 'bg-blue-600 border-blue-600 text-white'
+                                      : 'border-slate-300 bg-white'
+                                  }`}
+                                >
+                                  {isChecked && (
+                                    <Check className="w-3 h-3 stroke-[3]" />
+                                  )}
+                                </div>
+                                <div className="truncate min-w-0">
+                                  <div className="truncate font-semibold text-xs leading-tight">
+                                    {p.name}
+                                  </div>
+                                  <div className="text-[10px] text-slate-400 truncate">
+                                    {p.code} {plantLoc && !userLocationId ? `• ${plantLoc.name}` : ''}
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    {userPlantIds.length === 0 && (
+                      <p className="text-[11px] text-amber-600 font-medium">
+                        * Please select at least one plant. For multi-plant admin, select all plants they manage.
+                      </p>
+                    )}
                   </div>
                 </>
               )}
@@ -2699,17 +2832,16 @@ function SettingsContent() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Location
+                        Location (Filter)
                       </label>
                       <select
                         value={userLocationId}
                         onChange={(e) => {
                           setUserLocationId(e.target.value);
-                          setUserPlantId('');
                         }}
                         className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer"
                       >
-                        <option value="">-- All / Unrestricted --</option>
+                        <option value="">-- All Locations / Any --</option>
                         {locations.map((loc) => (
                           <option key={loc.id} value={loc.id}>
                             {loc.name}
@@ -2718,26 +2850,6 @@ function SettingsContent() {
                       </select>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Production Plant
-                      </label>
-                      <select
-                        value={userPlantId}
-                        onChange={(e) => setUserPlantId(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer"
-                      >
-                        <option value="">-- All / Unrestricted --</option>
-                        {availablePlantsForUser.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
                         Department
@@ -2755,19 +2867,141 @@ function SettingsContent() {
                         ))}
                       </select>
                     </div>
+                  </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Sub Department
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Sub Department
+                    </label>
+                    <input
+                      type="text"
+                      value={userSubDept}
+                      onChange={(e) => setUserSubDept(e.target.value)}
+                      placeholder="e.g. None"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <Building className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Assigned Production Plant(s)</span>
+                        {userPlantIds.length > 0 && (
+                          <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded-full">
+                            {userPlantIds.length} Selected
+                          </span>
+                        )}
                       </label>
-                      <input
-                        type="text"
-                        value={userSubDept}
-                        onChange={(e) => setUserSubDept(e.target.value)}
-                        placeholder="e.g. None"
-                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const allIds = availablePlantsForUser.map((p) => p.id);
+                            setUserPlantIds(allIds);
+                            if (allIds.length > 0) setUserPlantId(allIds[0]);
+                          }}
+                          className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                        >
+                          Select All
+                        </button>
+                        <span className="text-slate-300 text-xs">|</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUserPlantIds([]);
+                            setUserPlantId('');
+                          }}
+                          className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 hover:underline cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      </div>
                     </div>
+
+                    <div className="border border-slate-200 rounded-xl p-2.5 bg-slate-50/70 max-h-44 overflow-y-auto">
+                      {availablePlantsForUser.length === 0 ? (
+                        <p className="text-xs text-slate-400 py-3 text-center">
+                          No plants found for this selection.
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {availablePlantsForUser.map((p) => {
+                            const isChecked = userPlantIds.includes(p.id) || userPlantId === p.id;
+                            const plantLoc = locations.find((l) => l.id === p.location_id);
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => {
+                                  let next: string[];
+                                  if (isChecked) {
+                                    next = userPlantIds.filter((id) => id !== p.id);
+                                    if (userPlantId === p.id) {
+                                      setUserPlantId(next[0] || '');
+                                    }
+                                  } else {
+                                    next = [...userPlantIds.filter((id) => id !== p.id), p.id];
+                                    if (!userPlantId) setUserPlantId(p.id);
+                                  }
+                                  setUserPlantIds(next);
+                                }}
+                                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-xs transition border cursor-pointer ${
+                                  isChecked
+                                    ? 'bg-blue-50 border-blue-400 text-blue-900 font-medium shadow-xs'
+                                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100/80 hover:border-slate-300'
+                                }`}
+                              >
+                                <div
+                                  className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border transition ${
+                                    isChecked
+                                      ? 'bg-blue-600 border-blue-600 text-white'
+                                      : 'border-slate-300 bg-white'
+                                  }`}
+                                >
+                                  {isChecked && (
+                                    <Check className="w-3 h-3 stroke-[3]" />
+                                  )}
+                                </div>
+                                <div className="truncate min-w-0">
+                                  <div className="truncate font-semibold text-xs leading-tight">
+                                    {p.name}
+                                  </div>
+                                  <div className="text-[10px] text-slate-400 truncate">
+                                    {p.code} {plantLoc && !userLocationId ? `• ${plantLoc.name}` : ''}
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    {userPlantIds.length > 0 && (
+                      <div className="flex flex-wrap gap-1 pt-1">
+                        {plants
+                          .filter((p) => userPlantIds.includes(p.id))
+                          .map((p) => (
+                            <span
+                              key={p.id}
+                              className="inline-flex items-center gap-1 text-[10px] bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full font-medium"
+                            >
+                              {p.name}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const next = userPlantIds.filter((id) => id !== p.id);
+                                  setUserPlantIds(next);
+                                  if (userPlantId === p.id) setUserPlantId(next[0] || '');
+                                }}
+                                className="hover:text-red-500 cursor-pointer ml-0.5"
+                              >
+                                &times;
+                              </button>
+                            </span>
+                          ))}
+                      </div>
+                    )}
                   </div>
                 </>
               )}

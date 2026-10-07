@@ -98,6 +98,17 @@ export async function POST(req: NextRequest) {
     }
 
     const isItAdmin = resolvedRole === 'it_admin';
+    const incomingPlantIds: string[] | null = isItAdmin
+      ? null
+      : Array.isArray(plant_ids) && plant_ids.length > 0
+      ? plant_ids
+      : resolvedPltId
+      ? [resolvedPltId]
+      : null;
+    const primaryPlantId = isItAdmin
+      ? null
+      : resolvedPltId || (incomingPlantIds && incomingPlantIds.length > 0 ? incomingPlantIds[0] : null);
+
     const createdUser = await createUser(
       {
         email: email.trim(),
@@ -106,7 +117,7 @@ export async function POST(req: NextRequest) {
         emp_code: emp_code ? emp_code.trim() : null,
         role: resolvedRole,
         location_id: isItAdmin ? null : resolvedLocId,
-        plant_id: isItAdmin ? null : resolvedPltId,
+        plant_id: primaryPlantId,
         department_id: isItAdmin ? null : resolvedDeptId,
         sub_department: isItAdmin ? null : (sub_department && sub_department.toLowerCase() !== 'none' ? sub_department.trim() : null),
       },
@@ -114,7 +125,7 @@ export async function POST(req: NextRequest) {
         can_edit: isItAdmin ? true : Boolean(can_edit),
         category_ids: isItAdmin ? null : (Array.isArray(category_ids) && category_ids.length > 0 ? category_ids : null),
         location_ids: isItAdmin ? null : (Array.isArray(location_ids) && location_ids.length > 0 ? location_ids : (resolvedLocId ? [resolvedLocId] : null)),
-        plant_ids: isItAdmin ? null : (Array.isArray(plant_ids) && plant_ids.length > 0 ? plant_ids : (resolvedPltId ? [resolvedPltId] : null)),
+        plant_ids: incomingPlantIds,
         department_ids: isItAdmin ? null : (Array.isArray(department_ids) && department_ids.length > 0 ? department_ids : (resolvedDeptId ? [resolvedDeptId] : null)),
         sub_department: isItAdmin ? null : (sub_department && sub_department.toLowerCase() !== 'none' ? sub_department.trim() : null),
       }
@@ -208,7 +219,11 @@ export async function PATCH(req: NextRequest) {
       userUpdates.sub_department = null;
     } else {
       if (location_id !== undefined) userUpdates.location_id = location_id || null;
-      if (plant_id !== undefined) userUpdates.plant_id = plant_id || null;
+      if (plant_ids !== undefined && Array.isArray(plant_ids)) {
+        userUpdates.plant_id = plant_ids.length > 0 ? plant_ids[0] : null;
+      } else if (plant_id !== undefined) {
+        userUpdates.plant_id = plant_id || null;
+      }
       if (department_id !== undefined) userUpdates.department_id = department_id || null;
       if (sub_department !== undefined) {
         userUpdates.sub_department = sub_department && sub_department.toLowerCase() !== 'none' ? sub_department.trim() : null;
@@ -221,7 +236,11 @@ export async function PATCH(req: NextRequest) {
 
     // User scopes updates
     const resolvedLocationIds = isItAdmin ? null : (location_ids && location_ids.length > 0 ? location_ids : (location_id ? [location_id] : null));
-    const resolvedPlantIds = isItAdmin ? null : (plant_ids && plant_ids.length > 0 ? plant_ids : (plant_id ? [plant_id] : null));
+    const resolvedPlantIds = isItAdmin
+      ? null
+      : Array.isArray(plant_ids)
+      ? (plant_ids.length > 0 ? plant_ids : null)
+      : (plant_id ? [plant_id] : (userUpdates.plant_id ? [userUpdates.plant_id as string] : null));
     const resolvedDeptIds = isItAdmin ? null : (department_ids && department_ids.length > 0 ? department_ids : (department_id ? [department_id] : null));
 
     await updateUserScope(userId, {

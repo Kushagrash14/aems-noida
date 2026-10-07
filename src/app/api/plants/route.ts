@@ -22,10 +22,10 @@ export async function GET(req: NextRequest) {
   // Non-IT Admins are strictly scoped to their assigned plant(s)
   const currentUser = validation.user;
   if (currentUser.role !== 'it_admin') {
-    if (currentUser.plant_id) {
-      plants = plants.filter((p) => p.id === currentUser.plant_id);
-    } else if (validation.scope?.plant_ids && validation.scope.plant_ids.length > 0) {
+    if (validation.scope?.plant_ids && validation.scope.plant_ids.length > 0) {
       plants = plants.filter((p) => validation.scope!.plant_ids!.includes(p.id));
+    } else if (currentUser.plant_id) {
+      plants = plants.filter((p) => p.id === currentUser.plant_id);
     } else if (currentUser.location_id) {
       plants = plants.filter((p) => p.location_id === currentUser.location_id);
     }

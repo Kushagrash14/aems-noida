@@ -47,31 +47,30 @@ export function isEntityInUserScope(
   const deptId = entity.current_department_id || entity.department_id;
   const catId = entity.category_id;
 
-  // Check direct user location_id, plant_id, department_id
-  if (user.location_id && locId && user.location_id !== locId) {
-    return false;
-  }
-  if (user.plant_id && pltId && user.plant_id !== pltId) {
-    return false;
-  }
-  if (user.department_id && deptId && user.department_id !== deptId) {
+  // Check Location scope: array in scope takes precedence over single location_id
+  if (scope?.location_ids && scope.location_ids.length > 0) {
+    if (locId && !scope.location_ids.includes(locId)) return false;
+  } else if (user.location_id && locId && user.location_id !== locId) {
     return false;
   }
 
-  // Check UserScope arrays if assigned
-  if (scope) {
-    if (scope.location_ids && scope.location_ids.length > 0 && locId) {
-      if (!scope.location_ids.includes(locId)) return false;
-    }
-    if (scope.plant_ids && scope.plant_ids.length > 0 && pltId) {
-      if (!scope.plant_ids.includes(pltId)) return false;
-    }
-    if (scope.department_ids && scope.department_ids.length > 0 && deptId) {
-      if (!scope.department_ids.includes(deptId)) return false;
-    }
-    if (scope.category_ids && scope.category_ids.length > 0 && catId) {
-      if (!scope.category_ids.includes(catId)) return false;
-    }
+  // Check Plant scope: array in scope (multi-plant) takes precedence over single plant_id
+  if (scope?.plant_ids && scope.plant_ids.length > 0) {
+    if (pltId && !scope.plant_ids.includes(pltId)) return false;
+  } else if (user.plant_id && pltId && user.plant_id !== pltId) {
+    return false;
+  }
+
+  // Check Department scope: array in scope takes precedence over single department_id
+  if (scope?.department_ids && scope.department_ids.length > 0) {
+    if (deptId && !scope.department_ids.includes(deptId)) return false;
+  } else if (user.department_id && deptId && user.department_id !== deptId) {
+    return false;
+  }
+
+  // Check Category scope if assigned
+  if (scope?.category_ids && scope.category_ids.length > 0 && catId) {
+    if (!scope.category_ids.includes(catId)) return false;
   }
 
   return true;

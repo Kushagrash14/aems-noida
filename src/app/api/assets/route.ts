@@ -89,7 +89,13 @@ export async function POST(req: NextRequest) {
     // For Facility Admin or User, enforce their assigned location, plant, and department
     if (validation.user.role !== 'it_admin') {
       if (validation.user.location_id) asset.current_location_id = validation.user.location_id;
-      if (validation.user.plant_id) asset.current_plant_id = validation.user.plant_id;
+      if (validation.scope?.plant_ids && validation.scope.plant_ids.length > 0) {
+        if (!asset.current_plant_id || !validation.scope.plant_ids.includes(asset.current_plant_id)) {
+          asset.current_plant_id = validation.scope.plant_ids[0];
+        }
+      } else if (validation.user.plant_id) {
+        asset.current_plant_id = validation.user.plant_id;
+      }
       if (validation.user.department_id) asset.current_department_id = validation.user.department_id;
     }
 

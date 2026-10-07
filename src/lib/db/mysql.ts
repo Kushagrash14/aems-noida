@@ -86,6 +86,15 @@ export function getPool(): Pool {
         if (field.type === 'DATE') {
           return field.string();
         }
+        if (field.type === 'JSON') {
+          const v = field.string();
+          if (v === null) return null;
+          try {
+            return JSON.parse(v);
+          } catch {
+            return v;
+          }
+        }
         return next();
       },
     });

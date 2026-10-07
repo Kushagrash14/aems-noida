@@ -3654,13 +3654,31 @@ export async function getUsersWithScopes(): Promise<Array<User & { scope?: UserS
     if (d.admin_user_id) deptMapByAdmin.set(d.admin_user_id, d.id);
   });
 
-  return ((usersData as Array<User & { scope?: UserScope | null }>) || []).map((u) => {
-    const scope = u.scope;
-    const resolvedDeptId = scope?.department_ids?.[0] || scope?.category_ids?.[0] || deptMapByAdmin.get(u.id) || null;
-    const resolvedLocId = u.location_id || scope?.location_ids?.[0] || null;
-    const resolvedPltId = u.plant_id || scope?.plant_ids?.[0] || null;
+  const parseScopeArray = (val: unknown): string[] | null => {
+    if (!val) return null;
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+      try {
+        const parsed = JSON.parse(val);
+        return Array.isArray(parsed) ? parsed : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
 
-    if (scope && resolvedDeptId && (!scope.department_ids || scope.department_ids.length === 0)) {
+  return ((usersData as any[]) || []).map((u: any) => {
+    const scope = u.scope;
+    const parsedLocIds = parseScopeArray(scope?.location_ids);
+    const parsedPltIds = parseScopeArray(scope?.plant_ids);
+    const parsedDeptIds = parseScopeArray(scope?.department_ids);
+
+    const resolvedDeptId = parsedDeptIds?.[0] || scope?.category_ids?.[0] || deptMapByAdmin.get(u.id) || null;
+    const resolvedLocId = u.location_id || parsedLocIds?.[0] || null;
+    const resolvedPltId = u.plant_id || parsedPltIds?.[0] || null;
+
+    if (scope && resolvedDeptId && (!parsedDeptIds || parsedDeptIds.length === 0)) {
       scope.department_ids = [resolvedDeptId];
     }
 
@@ -3672,9 +3690,9 @@ export async function getUsersWithScopes(): Promise<Array<User & { scope?: UserS
       scope: scope
         ? {
             ...scope,
-            location_ids: scope.location_ids,
-            plant_ids: scope.plant_ids,
-            department_ids: scope.department_ids || (resolvedDeptId ? [resolvedDeptId] : null),
+            location_ids: parsedLocIds,
+            plant_ids: parsedPltIds,
+            department_ids: parsedDeptIds || (resolvedDeptId ? [resolvedDeptId] : null),
             category_ids: null,
           }
         : null,
