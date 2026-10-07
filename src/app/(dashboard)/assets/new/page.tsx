@@ -1289,8 +1289,11 @@ function AssetWizardContent() {
 
         if (plantsRes?.plants?.length) {
           setPlants(plantsRes.plants);
+          const urlPlt = searchParams.get('plantId');
           const userPlt = meRes?.user?.plant_id;
-          const pltToSet = (userPlt && plantsRes.plants.some((p: Plant) => p.id === userPlt))
+          const pltToSet = (urlPlt && plantsRes.plants.some((p: Plant) => p.id === urlPlt))
+            ? urlPlt
+            : (userPlt && plantsRes.plants.some((p: Plant) => p.id === userPlt))
             ? userPlt
             : plantsRes.plants[0].id;
           if (!isEditMode) {

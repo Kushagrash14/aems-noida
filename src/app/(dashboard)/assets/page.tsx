@@ -78,16 +78,18 @@ function AssetsDirectoryContent() {
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Sync Master Filters from URL Search Parameters (e.g. from Sidebar department links or deep links)
+  // Sync Master Filters from URL Search Parameters (e.g. from Sidebar department links or Navbar plant selector)
   useEffect(() => {
     const deptParam = searchParams.get('deptId') || searchParams.get('department') || '';
-    if (deptParam) {
-      setSelectedDepartment(deptParam);
-    }
-    const locParam = searchParams.get('location') || '';
-    if (locParam) setSelectedLocation(locParam);
-    const plantParam = searchParams.get('plant') || '';
-    if (plantParam) setSelectedPlant(plantParam);
+    setSelectedDepartment(deptParam);
+    const locParam = searchParams.get('locationId') || searchParams.get('location') || '';
+    setSelectedLocation(locParam);
+    const plantParam = searchParams.get('plantId') || searchParams.get('plant') || '';
+    setSelectedPlant(plantParam);
+    const statusParam = searchParams.get('status') || '';
+    if (statusParam) setSelectedStatus(statusParam);
+    const searchParam = searchParams.get('search') || '';
+    if (searchParam) setSearchQuery(searchParam);
   }, [searchParams]);
 
   // Transfer modal state

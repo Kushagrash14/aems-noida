@@ -28,6 +28,7 @@ type ActiveTab = 'damaged' | 'missing' | 'scrap' | 'resolved';
 
 function DamagedScrapContent() {
   const searchParams = useSearchParams();
+  const selectedPlant = searchParams.get('plantId') || searchParams.get('plant') || '';
   const [reports, setReports] = useState<DamageScrapReport[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
@@ -187,6 +188,13 @@ function DamagedScrapContent() {
       } else {
         if (!isRepairedResolved(r)) return false;
       }
+    }
+
+    if (selectedPlant) {
+      const matchesPlt =
+        r.asset?.current_plant_id === selectedPlant ||
+        r.asset?.plant?.id === selectedPlant;
+      if (!matchesPlt) return false;
     }
 
     if (!searchQuery.trim()) return true;

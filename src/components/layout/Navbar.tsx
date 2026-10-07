@@ -12,16 +12,12 @@ import {
   Download,
   Plus,
   MapPin,
-  X,
-  Check,
   ChevronDown,
-  SlidersHorizontal,
-  RotateCcw,
   Users,
   User as UserIcon,
+  HelpCircle,
   Box,
   AlertTriangle,
-  HelpCircle,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -34,11 +30,11 @@ const LOCATIONS_STATIC = [
   { id: '11111111-1111-1111-1111-111111111101', name: 'Pune', short: 'Pune' },
 ];
 
-const PLANTS_STATIC = [
-  { id: '', location_id: '', name: 'All Plants', short: 'All Plants' },
-  { id: '22222222-2222-2222-2222-222222222201', location_id: '11111111-1111-1111-1111-111111111101', name: 'NGM', short: 'NGM' },
-  { id: '22222222-2222-2222-2222-222222222202', location_id: '11111111-1111-1111-1111-111111111101', name: 'PGTL', short: 'PGTL' },
-  { id: '22222222-2222-2222-2222-222222222203', location_id: '11111111-1111-1111-1111-111111111101', name: 'PGEL', short: 'PGEL' },
+const PLANTS_STATIC: Array<{ id: string; location_id: string; name: string; short: string; code?: string }> = [
+  { id: '', location_id: '', name: 'All Plants', short: 'All Plants', code: '' },
+  { id: '22222222-2222-2222-2222-222222222201', location_id: '11111111-1111-1111-1111-111111111101', name: 'NGM', short: 'NGM', code: 'NGM' },
+  { id: '22222222-2222-2222-2222-222222222202', location_id: '11111111-1111-1111-1111-111111111101', name: 'PGTL', short: 'PGTL', code: 'PGTL' },
+  { id: '22222222-2222-2222-2222-222222222203', location_id: '11111111-1111-1111-1111-111111111101', name: 'PGEL', short: 'PGEL', code: 'PGEL' },
 ];
 
 const DEFAULT_DEPT_CATEGORIES: Record<string, string[]> = {
@@ -169,24 +165,15 @@ function NavbarContent({ user, scope }: NavbarProps) {
     setLocalStatus(statusVal);
   }, [statusVal]);
 
-  // Dynamic Structure Data for Filter Popover
+  // Dynamic Structure Data
   const [locations, setLocations] = useState<Location[]>([]);
   const [plants, setPlants] = useState<Plant[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [deptCategoryMap, setDeptCategoryMap] = useState<Record<string, string[]>>({});
 
-  // Popover Open States
-  const [scopeFilterOpen, setScopeFilterOpen] = useState(false);
-  const [hrFilterOpen, setHrFilterOpen] = useState(false);
+  // Popover Open State
   const [entryMenuOpen, setEntryMenuOpen] = useState(false);
-  const scopeRef = useRef<HTMLDivElement | null>(null);
   const entryMenuRef = useRef<HTMLDivElement | null>(null);
-  const hrFilterRef = useRef<HTMLDivElement | null>(null);
-
-  // Temp picker state inside scope popover
-  const [tempLocId, setTempLocId] = useState('');
-  const [tempPltId, setTempPltId] = useState('');
 
   const [isPending, startTransition] = useTransition();
 
@@ -221,24 +208,18 @@ function NavbarContent({ user, scope }: NavbarProps) {
     };
   }, [fetchLookups]);
 
-  // Close scope, entry menu & filter popovers on outside click
+  // Close entry menu popover on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (scopeRef.current && !scopeRef.current.contains(e.target as Node)) {
-        setScopeFilterOpen(false);
-      }
       if (entryMenuRef.current && !entryMenuRef.current.contains(e.target as Node)) {
         setEntryMenuOpen(false);
       }
-      if (hrFilterRef.current && !hrFilterRef.current.contains(e.target as Node)) {
-        setHrFilterOpen(false);
-      }
     }
-    if (scopeFilterOpen || entryMenuOpen || hrFilterOpen) {
+    if (entryMenuOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [scopeFilterOpen, entryMenuOpen, hrFilterOpen]);
+  }, [entryMenuOpen]);
 
   // Non-blocking URL search parameters update
   const updateUrlParams = useCallback(
@@ -262,240 +243,55 @@ function NavbarContent({ user, scope }: NavbarProps) {
       startTransition(() => {
         router.replace(newUrl, { scroll: false });
       });
+
+      // Dispatch real-time global event for instant reactivity
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('aems:plant-changed', { detail: { plantId: updates.plantId } }));
+      }
     },
     [router]
   );
-
-  const handleOpenScope = () => {
-    setTempLocId(localLocation);
-    setTempPltId(localPlant);
-    setScopeFilterOpen((prev) => !prev);
-  };
-
-  const handleApplyScope = () => {
-    setScopeFilterOpen(false);
-    setLocalLocation(tempLocId);
-    setLocalPlant(tempPltId);
-    updateUrlParams({
-      locationId: tempLocId,
-      plantId: tempPltId,
-    });
-  };
-
-  const handleResetScope = () => {
-    setTempLocId('');
-    setTempPltId('');
-    setScopeFilterOpen(false);
-    setLocalLocation('');
-    setLocalPlant('');
-    updateUrlParams({
-      locationId: null,
-      plantId: null,
-    });
-  };
-
-  // Instant Cascading Selection Handlers with 0ms optimistic UI update
-  const handleLocationChange = (locId: string) => {
-    let newPlt = localPlant;
-    let newDept = localDept;
-
-    if (locId) {
-      const validPlants = plants.filter((p) => p.location_id === locId);
-      if (!validPlants.some((p) => p.id === localPlant)) {
-        newPlt = '';
-        newDept = '';
-      }
-    } else {
-      newPlt = '';
-      newDept = '';
-    }
-
-    setLocalLocation(locId);
-    setLocalPlant(newPlt);
-    setLocalDept(newDept);
-    setLocalCategory('');
-
-    updateUrlParams({
-      locationId: locId,
-      plantId: newPlt,
-      deptId: newDept,
-      categoryId: null,
-    });
-  };
-
-  const handlePlantChange = (pltId: string) => {
-    let newDept = localDept;
-    if (pltId) {
-      const validDepts = departments.filter((d) => !d.plant_id || d.plant_id === pltId);
-      if (!validDepts.some((d) => d.id === localDept)) {
-        newDept = '';
-      }
-    } else {
-      newDept = '';
-    }
-
-    setLocalPlant(pltId);
-    setLocalDept(newDept);
-    setLocalCategory('');
-
-    updateUrlParams({
-      plantId: pltId,
-      deptId: newDept,
-      categoryId: null,
-    });
-  };
-
-  const handleDeptChange = (dId: string) => {
-    setLocalDept(dId);
-    setLocalCategory('');
-    updateUrlParams({
-      deptId: dId,
-      categoryId: null,
-    });
-  };
-
-  const handleCategoryChange = (cId: string) => {
-    setLocalCategory(cId);
-    updateUrlParams({
-      categoryId: cId,
-    });
-  };
-
-  const handleStatusChange = (st: string) => {
-    setLocalStatus(st);
-    updateUrlParams({
-      status: st,
-    });
-  };
-
-  const resetAllHRFilters = () => {
-    setLocalLocation('');
-    setLocalPlant('');
-    setLocalDept('');
-    setLocalCategory('');
-    setLocalStatus('ALL');
-    updateUrlParams({
-      locationId: null,
-      plantId: null,
-      deptId: null,
-      categoryId: null,
-      status: null,
-      search: null,
-    });
-  };
 
   const handleOpenAddEmployee = () => {
     window.dispatchEvent(new CustomEvent('aems:open-add-employee'));
   };
 
-  const activeHRFiltersCount = useMemo(() => {
-    let count = 0;
-    if (localLocation) count++;
-    if (localPlant) count++;
-    if (localDept) count++;
-    if (localCategory) count++;
-    if (localStatus && localStatus !== 'ALL') count++;
-    return count;
-  }, [localLocation, localPlant, localDept, localCategory, localStatus]);
-
   const isItAdmin = activeUser?.role === 'it_admin';
 
-  // For non-IT Admin, resolve their assigned location, plant, and department
-  const assignedLocId = activeUser?.location_id || activeScope?.location_ids?.[0] || '';
+  // Allowed plants based on user privileges and assigned multi-plant scopes
+  const userAllowedPlants = useMemo(() => {
+    const allAvailable = plants.length > 0 ? plants : PLANTS_STATIC.filter((p) => p.id);
+    if (isItAdmin) {
+      return allAvailable;
+    }
+    // Check if non-IT admin/user has scoped plant_ids
+    if (activeScope?.plant_ids && activeScope.plant_ids.length > 0) {
+      const scoped = allAvailable.filter((p) => activeScope.plant_ids!.includes(p.id));
+      if (scoped.length > 0) return scoped;
+    }
+    // Fallback to activeUser.plant_id
+    if (activeUser?.plant_id) {
+      const p = allAvailable.filter((pl) => pl.id === activeUser.plant_id);
+      if (p.length > 0) return p;
+    }
+    return allAvailable;
+  }, [plants, isItAdmin, activeScope, activeUser]);
+
   const assignedPltId = activeUser?.plant_id || activeScope?.plant_ids?.[0] || '';
-  const assignedDeptId = activeUser?.department_id || activeScope?.department_ids?.[0] || '';
-
-  const assignedLoc = locations.find((l) => l.id === assignedLocId) || LOCATIONS_STATIC.find((l) => l.id === assignedLocId);
   const assignedPlt = plants.find((p) => p.id === assignedPltId) || PLANTS_STATIC.find((p) => p.id === assignedPltId);
-  const assignedDept = departments.find((d) => d.id === assignedDeptId);
-
-  const activeLocObj = locations.find((l) => l.id === localLocation) || LOCATIONS_STATIC.find((l) => l.id === localLocation);
   const activePltObj = plants.find((p) => p.id === localPlant) || PLANTS_STATIC.find((p) => p.id === localPlant);
-  const locDisplay = !isItAdmin
-    ? (assignedLoc?.name || (locations.length === 0 ? 'Loading...' : 'Assigned Location'))
-    : (activeLocObj ? (activeLocObj.name.length > 18 ? activeLocObj.name.slice(0, 18) + '...' : activeLocObj.name) : 'All Locations');
-  const pltDisplay = !isItAdmin
-    ? (assignedPlt?.name || (plants.length === 0 ? 'Loading...' : 'Assigned Plant'))
-    : (activePltObj ? (activePltObj.name.length > 18 ? activePltObj.name.slice(0, 18) + '...' : activePltObj.name) : 'All Plants');
-  const deptDisplay = assignedDept?.name || '';
-  const isFilterActive = Boolean(localLocation || localPlant);
+  const pltDisplay = activePltObj
+    ? activePltObj.name
+    : (!isItAdmin && userAllowedPlants.length === 1 ? (userAllowedPlants[0]?.name || 'Assigned Plant') : 'All Plants');
 
-  const availablePlantsForHR = useMemo(() => {
-    if (!localLocation) return plants;
-    return plants.filter((p) => p.location_id === localLocation);
-  }, [plants, localLocation]);
-
-  const availableDeptsForHR = useMemo(() => {
-    if (localPlant) {
-      return departments.filter((d) => !d.plant_id || d.plant_id === localPlant);
-    }
-    if (localLocation) {
-      const pIds = plants.filter((p) => p.location_id === localLocation).map((p) => p.id);
-      return departments.filter((d) => !d.plant_id || pIds.includes(d.plant_id));
-    }
-    return departments;
-  }, [departments, plants, localLocation, localPlant]);
-
-  // Step 4: Dynamically cascade categories for the selected department
-  const availableCategoriesForNavbar = useMemo(() => {
-    // 1. Strictly filter out any category whose name matches a department name
-    const deptNameSet = new Set(departments.map((d) => d.name.trim().toUpperCase()));
-    const cleanDbCats = categories.filter((c) => !deptNameSet.has(c.name.trim().toUpperCase()));
-
-    // Target department ID: either selected from dropdown or user's assigned department
-    const targetDeptId = localDept || (!isItAdmin ? assignedDeptId : '');
-
-    // If no department is selected, return all clean categories
-    if (!targetDeptId) return cleanDbCats;
-
-    const selectedDept = departments.find((d) => d.id === targetDeptId);
-    if (!selectedDept) return cleanDbCats;
-
-    const deptNameUpper = selectedDept.name.trim().toUpperCase();
-
-    // 2. Category IDs already used by assets belonging to this department
-    const assetCatIdsForDept = deptCategoryMap[targetDeptId] || [];
-
-    // 3. User custom department categories from localStorage
-    let customDeptCatNames: string[] = [];
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem(`aems_dept_cats_${deptNameUpper}`);
-        if (stored) {
-          customDeptCatNames = JSON.parse(stored).map((s: string) => s.trim().toUpperCase());
-        }
-      } catch {}
-    }
-
-    // 4. Predefined default categories for this department
-    let defaultCats: string[] = [];
-    Object.keys(DEFAULT_DEPT_CATEGORIES).forEach((key) => {
-      const keyUpper = key.toUpperCase();
-      if (
-        deptNameUpper === keyUpper ||
-        deptNameUpper.includes(keyUpper) ||
-        keyUpper.includes(deptNameUpper)
-      ) {
-        defaultCats.push(...DEFAULT_DEPT_CATEGORIES[key].map((s) => s.toUpperCase()));
-      }
+  const handleDirectPlantChange = (pltId: string) => {
+    setLocalPlant(pltId);
+    const matchedPlant = plants.find((p) => p.id === pltId);
+    updateUrlParams({
+      plantId: pltId || null,
+      locationId: matchedPlant?.location_id || null,
     });
-
-    // Allowed category names for this department
-    const allowedDeptCatNames = new Set([
-      ...customDeptCatNames,
-      ...defaultCats,
-    ]);
-
-    // Filter DB categories: strictly match configured department types OR categories of existing assets in this dept
-    const filtered = cleanDbCats.filter((c) => {
-      if (assetCatIdsForDept.includes(c.id)) return true;
-      const cNameUpper = c.name.trim().toUpperCase();
-      if (allowedDeptCatNames.has(cNameUpper)) return true;
-      return false;
-    });
-
-    return filtered;
-  }, [categories, departments, localDept, assignedDeptId, isItAdmin, deptCategoryMap]);
+  };
 
   const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
   const handleAssetButtonClick = () => {
@@ -598,324 +394,36 @@ function NavbarContent({ user, scope }: NavbarProps) {
       {/* Right Section — shrink-0 so it never squishes */}
       <div className="flex items-center gap-2 shrink-0 pl-3">
 
-        {/* Compact Scoped Plant Badge for Facility Admin & Users */}
-        {!isItAdmin ? (
-          <div
-            className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] border bg-white/[0.06] border-white/10 text-slate-200 shadow-2xs select-none"
-            title={`Assigned Facility Scope: ${locDisplay} > ${pltDisplay}${deptDisplay ? ` > ${deptDisplay}` : ''}`}
-          >
-            <MapPin className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
-            <span>
-              Plant: <strong className="text-white font-semibold">{pltDisplay}</strong>
-            </span>
-          </div>
-        ) : (
-          /* Interactive Compact Plant Scope Badge (IT ADMIN ONLY) */
-          <div className="relative hidden md:block" ref={scopeRef}>
-            <button
-              type="button"
-              onClick={handleOpenScope}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] border transition-all cursor-pointer select-none ${
-                isFilterActive
-                  ? 'bg-blue-600/30 border-blue-400 text-blue-100 shadow-xs'
-                  : 'bg-white/[0.06] border-white/10 text-slate-300 hover:bg-white/[0.12] hover:text-white'
-              }`}
-              title={`Location & Plant Scope (${locDisplay} > ${pltDisplay})`}
-            >
-              <MapPin className={`w-3.5 h-3.5 shrink-0 ${isFilterActive ? 'text-blue-400 animate-pulse' : 'text-emerald-400'}`} />
-              <span>
-                Plant: <strong className="text-white font-semibold">{pltDisplay}</strong>
-              </span>
-              <ChevronDown className={`w-3 h-3 transition-transform ${scopeFilterOpen ? 'rotate-180 text-blue-400' : 'text-slate-400'}`} />
-            </button>
-
-            {/* Scope Dropdown Popover */}
-            {scopeFilterOpen && (
-              <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 p-4 z-50 text-xs text-slate-800 space-y-3 animate-in fade-in zoom-in-95 duration-150">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                  <div className="flex items-center gap-1.5 font-bold text-slate-900">
-                    <MapPin className="w-4 h-4 text-blue-600" />
-                    <span>Filter Location &amp; Plant Scope</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setScopeFilterOpen(false)}
-                    className="p-1 text-slate-400 hover:text-slate-700 rounded-md"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    Location
-                  </label>
-                  <select
-                    value={tempLocId}
-                    onChange={(e) => {
-                      const newLoc = e.target.value;
-                      setTempLocId(newLoc);
-                      if (newLoc) {
-                        const plantMatch = (plants.length ? plants : PLANTS_STATIC).find((p) => p.id === tempPltId);
-                        if (plantMatch && (plantMatch as Plant).location_id !== newLoc) {
-                          setTempPltId('');
-                        }
-                      }
-                    }}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:border-blue-500 cursor-pointer"
-                  >
-                    {(locations.length ? locations : LOCATIONS_STATIC).map((loc) => (
-                      <option key={loc.id} value={loc.id}>
-                        {loc.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    Production Plant
-                  </label>
-                  <select
-                    value={tempPltId}
-                    onChange={(e) => setTempPltId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:border-blue-500 cursor-pointer"
-                  >
-                    {(plants.length ? plants : PLANTS_STATIC)
-                      .filter((p) => !tempLocId || !p.location_id || p.location_id === tempLocId)
-                      .map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={handleResetScope}
-                    className="text-[11px] font-bold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
-                  >
-                    Reset to All
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleApplyScope}
-                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-xs transition-colors cursor-pointer flex items-center gap-1"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Apply Scope</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* HIERARCHICAL FILTER BUTTON (TO THE LEFT OF RELOAD) */}
-        <div ref={hrFilterRef} className="relative">
-          <button
-            type="button"
-            onClick={() => setHrFilterOpen((prev) => !prev)}
-            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] font-bold transition-all cursor-pointer shadow-2xs ${
-              hrFilterOpen || activeHRFiltersCount > 0
-                ? 'bg-blue-600 text-white border-blue-400 shadow-blue-500/20 shadow-md'
-                : 'bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border-white/10'
-            }`}
-            title="Hierarchical Filters"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5 text-blue-300" />
-            <span>Filter</span>
-            {activeHRFiltersCount > 0 && (
-              <span className="w-4 h-4 rounded-full bg-white text-blue-700 font-extrabold text-[10px] flex items-center justify-center ml-0.5">
-                {activeHRFiltersCount}
-              </span>
-            )}
-            <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform duration-200 ${hrFilterOpen ? 'rotate-180' : ''}`} />
-          </button>
-
-          {/* CASCADING FILTER POPOVER */}
-          {hrFilterOpen && (
-            <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-white border border-slate-200 text-slate-800 rounded-2xl p-4 shadow-2xl z-[100] space-y-3.5 animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <SlidersHorizontal className="w-4 h-4 text-blue-600" />
-                  <span className="text-xs font-extrabold tracking-wide uppercase text-slate-900">Filters</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {activeHRFiltersCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={resetAllHRFilters}
-                      className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
-                    >
-                      <RotateCcw className="w-3 h-3" />
-                      <span>Reset</span>
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setHrFilterOpen(false)}
-                    className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                    title="Close filter menu"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-3 text-xs">
-                {/* Location */}
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center justify-between">
-                    <span>Location</span>
-                    {localLocation && <span className="text-emerald-600 text-[9px] font-bold">✓ Selected</span>}
-                  </label>
-                  <select
-                    value={localLocation}
-                    onChange={(e) => handleLocationChange(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer text-xs"
-                  >
-                    <option value="" className="text-slate-900">
-                      {isItAdmin
-                        ? `All Locations (${locations.length || LOCATIONS_STATIC.length})`
-                        : (assignedLoc?.name || locations[0]?.name || 'Assigned Location')}
+        {/* Direct Production Plant Filter Dropdown */}
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border bg-white/[0.08] hover:bg-white/[0.12] border-white/15 text-slate-200 shadow-2xs transition-all select-none">
+          <MapPin className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+          <span className="text-slate-400 font-bold text-[11px] shrink-0">Plant:</span>
+          {userAllowedPlants.length > 1 ? (
+            <div className="relative flex items-center">
+              <select
+                value={localPlant}
+                onChange={(e) => handleDirectPlantChange(e.target.value)}
+                className="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer pr-4 appearance-none [&>option]:bg-slate-900 [&>option]:text-white"
+                title="Filter all data by Production Plant"
+              >
+                <option value="">
+                  {isItAdmin ? 'All Plants' : `All Assigned Plants (${userAllowedPlants.length})`}
+                </option>
+                {userAllowedPlants.map((p) => {
+                  const code = 'code' in p && (p as any).code ? (p as any).code : '';
+                  return (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {code && code !== p.name ? `(${code})` : ''}
                     </option>
-                    {isItAdmin
-                      ? (locations.length ? locations : LOCATIONS_STATIC).map((loc) => (
-                          <option key={loc.id} value={loc.id} className="text-slate-900">
-                            {loc.name}
-                          </option>
-                        ))
-                      : locations.length > 1 &&
-                        locations.map((loc) => (
-                          <option key={loc.id} value={loc.id} className="text-slate-900">
-                            {loc.name}
-                          </option>
-                        ))}
-                  </select>
-                </div>
-
-                {/* Plant */}
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                    <span>Plant</span>
-                  </label>
-                  <select
-                    value={localPlant}
-                    onChange={(e) => handlePlantChange(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer text-xs"
-                  >
-                    <option value="" className="text-slate-900">
-                      {isItAdmin
-                        ? (localLocation
-                            ? `All Plants at Location (${availablePlantsForHR.length})`
-                            : `All Plants (${plants.length || PLANTS_STATIC.length})`)
-                        : (assignedPlt?.name || plants[0]?.name || 'Assigned Plant')}
-                    </option>
-                    {isItAdmin
-                      ? availablePlantsForHR.map((p) => (
-                          <option key={p.id} value={p.id} className="text-slate-900">
-                            {p.name}
-                          </option>
-                        ))
-                      : plants.length > 1 &&
-                        plants.map((p) => (
-                          <option key={p.id} value={p.id} className="text-slate-900">
-                            {p.name}
-                          </option>
-                        ))}
-                  </select>
-                </div>
-
-                {/* Department */}
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                    <span>Department</span>
-                  </label>
-                  <select
-                    value={localDept}
-                    onChange={(e) => handleDeptChange(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer text-xs"
-                  >
-                    <option value="" className="text-slate-900">
-                      {isItAdmin
-                        ? `All Departments (${availableDeptsForHR.length})`
-                        : (assignedDept?.name || departments[0]?.name || 'Assigned Department')}
-                    </option>
-                    {isItAdmin
-                      ? availableDeptsForHR.map((d) => (
-                          <option key={d.id} value={d.id} className="text-slate-900">
-                            {d.name} ({d.code})
-                          </option>
-                        ))
-                      : departments.length > 1 &&
-                        departments.map((d) => (
-                          <option key={d.id} value={d.id} className="text-slate-900">
-                            {d.name} ({d.code})
-                          </option>
-                        ))}
-                  </select>
-                </div>
-
-                {/* Asset Type (when NOT in HR View) */}
-                {!isHRView && (
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                      <span>Asset Type</span>
-                    </label>
-                    <select
-                      value={localCategory}
-                      onChange={(e) => handleCategoryChange(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer text-xs"
-                    >
-                      <option value="" className="text-slate-900">
-                        {localDept || (!isItAdmin && assignedDeptId)
-                          ? `All Asset Types for Department (${availableCategoriesForNavbar.length})`
-                          : `All Asset Types (${availableCategoriesForNavbar.length})`}
-                      </option>
-                      {availableCategoriesForNavbar.map((c) => (
-                        <option key={c.id} value={c.id} className="text-slate-900">
-                          {c.name} ({c.code})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {/* Status */}
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                    <span>{isHRView ? 'Employment Status' : 'Lifecycle Status'}</span>
-                  </label>
-                  <select
-                    value={localStatus}
-                    onChange={(e) => handleStatusChange(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer text-xs"
-                  >
-                    {isHRView ? (
-                      <>
-                        <option value="ALL" className="text-slate-900">All Status (Active + Inactive)</option>
-                        <option value="ACTIVE" className="text-slate-900">Active Staff Only</option>
-                        <option value="INACTIVE" className="text-slate-900">Inactive Records Only</option>
-                      </>
-                    ) : (
-                      <>
-                        <option value="ALL" className="text-slate-900">All Lifecycle Statuses</option>
-                        <option value="in_service" className="text-slate-900">Active / In Service</option>
-                        <option value="in_storage" className="text-slate-900">Available / Stock Pool</option>
-                        <option value="maintenance" className="text-slate-900">Under Maintenance</option>
-                        <option value="damaged" className="text-slate-900">Damaged</option>
-                        <option value="scrapped" className="text-slate-900">Scrapped</option>
-                        <option value="missing" className="text-slate-900">Missing / Lost</option>
-                      </>
-                    )}
-                  </select>
-                </div>
-              </div>
+                  );
+                })}
+              </select>
+              <ChevronDown className="w-3 h-3 text-slate-400 pointer-events-none -ml-3" />
             </div>
+          ) : (
+            <span className="text-white font-bold text-xs">
+              {userAllowedPlants[0]?.name || pltDisplay}
+            </span>
           )}
         </div>
 

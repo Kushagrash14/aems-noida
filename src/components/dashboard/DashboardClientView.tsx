@@ -220,13 +220,52 @@ export default function DashboardClientView({
       return true;
     });
   }, [assets, selectedLocation, selectedPlant, selectedDepartment, selectedCategory, selectedStatus, searchQuery]);
+
+  // Filter complaints strictly matching selected plant and facility scope
+  const filteredComplaints = useMemo(() => {
+    return complaints.filter((c) => {
+      if (selectedPlant) {
+        const pId = c.machine?.plant_id;
+        if (pId && pId !== selectedPlant) return false;
+      }
+      if (selectedLocation) {
+        const lId = c.machine?.location_id;
+        if (lId && lId !== selectedLocation) return false;
+      }
+      if (selectedDepartment) {
+        const dId = c.machine?.department_id;
+        if (dId && dId !== selectedDepartment) return false;
+      }
+      return true;
+    });
+  }, [complaints, selectedPlant, selectedLocation, selectedDepartment]);
+
+  // Filter damage reports strictly matching selected plant and facility scope
+  const filteredDamageReports = useMemo(() => {
+    return damageReports.filter((d) => {
+      if (selectedPlant) {
+        const pId = d.asset?.current_plant_id || d.asset?.plant?.id;
+        if (pId && pId !== selectedPlant) return false;
+      }
+      if (selectedLocation) {
+        const lId = d.asset?.current_location_id || d.asset?.location?.id;
+        if (lId && lId !== selectedLocation) return false;
+      }
+      if (selectedDepartment) {
+        const dId = d.asset?.current_department_id || d.asset?.department?.id;
+        if (dId && dId !== selectedDepartment) return false;
+      }
+      return true;
+    });
+  }, [damageReports, selectedPlant, selectedLocation, selectedDepartment]);
+
   return (
     <div className="antialiased font-sans pb-10">
       {/* 1. Pinned Sticky KPI Cards (Connected seamlessly to Navbar, 100% Solid Opaque Shield) */}
       <DashboardKPISection
         assets={filteredAssets}
-        complaints={complaints}
-        damageReports={damageReports}
+        complaints={filteredComplaints}
+        damageReports={filteredDamageReports}
         departments={departments}
         plants={plants}
         locations={locations}
@@ -369,8 +408,8 @@ export default function DashboardClientView({
           onAssetUpdated={(updated) => {
             setAssets((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
           }}
-          complaints={complaints}
-          damageReports={damageReports}
+          complaints={filteredComplaints}
+          damageReports={filteredDamageReports}
           departments={departments}
           plants={plants}
           locations={locations}

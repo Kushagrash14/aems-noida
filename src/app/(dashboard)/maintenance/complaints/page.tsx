@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { PMComplaint } from '@/types/database';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import {
@@ -16,6 +17,16 @@ import {
 } from 'lucide-react';
 
 export default function ComplaintsInboxPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-slate-400">Loading complaints...</div>}>
+      <ComplaintsInboxContent />
+    </Suspense>
+  );
+}
+
+function ComplaintsInboxContent() {
+  const searchParams = useSearchParams();
+  const selectedPlant = searchParams.get('plantId') || searchParams.get('plant') || '';
   const [complaints, setComplaints] = useState<PMComplaint[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -89,6 +100,13 @@ export default function ComplaintsInboxPage() {
     }
   };
 
+  const filteredComplaints = useMemo(() => {
+    if (!selectedPlant) return complaints;
+    return complaints.filter((c) => {
+      return !c.machine?.plant_id || c.machine.plant_id === selectedPlant;
+    });
+  }, [complaints, selectedPlant]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -122,7 +140,7 @@ export default function ComplaintsInboxPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 text-slate-300">
-              {complaints.map((c) => (
+              {filteredComplaints.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-900/40 transition-colors">
                   <td className="px-4 py-3.5">
                     <div className="font-mono font-bold text-white">{c.machine?.machine_code || 'Unknown Unit'}</div>
