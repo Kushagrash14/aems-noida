@@ -121,6 +121,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Strict Guard: Only Root Super Admin can register another IT Admin
+    if (resolvedRole === 'it_admin' && validation.user.email !== 'software.2040@pgel.in') {
+      return NextResponse.json(
+        { error: 'Access Denied: Only the Root Super Admin can register new IT Administrators.' },
+        { status: 403 }
+      );
+    }
+
     const isItAdmin = resolvedRole === 'it_admin';
     const incomingPlantIds: string[] | null = isItAdmin
       ? null
@@ -218,6 +226,44 @@ export async function PATCH(req: NextRequest) {
 
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+    }
+
+    // 1. Strict Self-Modification Safeguard: Users cannot modify their own account, role, or permissions
+    if (userId === validation.user.id) {
+      return NextResponse.json(
+        { error: 'Security Violation: You cannot modify your own administrative account, role, or scopes.' },
+        { status: 403 }
+      );
+    }
+
+    const allUsers = await getUsersWithScopes();
+    const targetUser = allUsers.find((u) => u.id === userId);
+    if (!targetUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // 2. Root Super Admin Protection: Root account cannot be modified by any subordinate administrator
+    if (targetUser.email === 'software.2040@pgel.in' && validation.user.email !== 'software.2040@pgel.in') {
+      return NextResponse.json(
+        { error: 'Security Violation: The Root Super Admin account cannot be modified by subordinate administrators.' },
+        { status: 403 }
+      );
+    }
+
+    // 3. Subordinate Admin Safeguard: Facility Admin cannot edit any Admin or IT Admin accounts
+    if (validation.user.role === 'admin' && (targetUser.role === 'admin' || targetUser.role === 'it_admin')) {
+      return NextResponse.json(
+        { error: 'Access Denied: Facility Admins cannot modify administrative accounts.' },
+        { status: 403 }
+      );
+    }
+
+    // 4. IT Admin Role Assignment Guard: Only Root Super Admin can promote/assign someone to IT Admin
+    if (targetRole === 'it_admin' && validation.user.email !== 'software.2040@pgel.in') {
+      return NextResponse.json(
+        { error: 'Access Denied: Only the Root Super Admin can assign the IT Administrator role.' },
+        { status: 403 }
+      );
     }
 
     // Role assignment verification
@@ -341,7 +387,13 @@ export async function DELETE(req: NextRequest) {
 
   // Prevent self-deletion
   if (userId === validation.user.id) {
-    return NextResponse.json({ error: 'You cannot delete your own administrative account' }, { status: 400 });
+    return NextResponse.json({ error: 'Security Violation: You cannot delete your own administrative account' }, { status: 400 });
+  }
+
+  const allUsers = await getUsersWithScopes();
+  const targetUser = allUsers.find((u) => u.id === userId);
+  if (targetUser?.email === 'software.2040@pgel.in') {
+    return NextResponse.json({ error: 'Security Violation: The Root Super Admin account cannot be deleted' }, { status: 403 });
   }
 
   try {

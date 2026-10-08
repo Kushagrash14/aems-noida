@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getEmployees, createEmployee, updateEmployee, deleteEmployee } from '@/lib/store';
+import { getEmployees, createEmployee, updateEmployee, deleteEmployee, getDepartments } from '@/lib/store';
 import { validateSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth/session';
 import { canUserEdit } from '@/lib/permissions';
 import { logAuditEvent } from '@/lib/audit';
@@ -54,6 +54,13 @@ export async function POST(req: NextRequest) {
 
     if (!full_name || !department_id || !plant_id || !location_id) {
       return NextResponse.json({ error: 'Missing mandatory employee fields (Name, Department, Plant, Location)' }, { status: 400 });
+    }
+
+    // Validate department exists in master records
+    const masterDepts = await getDepartments();
+    const targetDept = masterDepts.find((d) => d.id === department_id);
+    if (!targetDept) {
+      return NextResponse.json({ error: 'Invalid department: Selected department does not exist in master records' }, { status: 400 });
     }
 
     const employee = await createEmployee({
@@ -118,7 +125,16 @@ export async function PUT(req: NextRequest) {
     if (email !== undefined) updates.email = email ? email.trim() : null;
     if (phone !== undefined) updates.phone = phone ? phone.trim() : null;
     if (designation !== undefined) updates.designation = designation ? designation.trim() : null;
-    if (department_id !== undefined) updates.department_id = department_id;
+    if (department_id !== undefined) {
+      if (department_id) {
+        const masterDepts = await getDepartments();
+        const targetDept = masterDepts.find((d) => d.id === department_id);
+        if (!targetDept) {
+          return NextResponse.json({ error: 'Invalid department: Selected department does not exist in master records' }, { status: 400 });
+        }
+      }
+      updates.department_id = department_id;
+    }
     if (plant_id !== undefined) updates.plant_id = plant_id;
     if (location_id !== undefined) updates.location_id = location_id;
     if (status !== undefined) updates.status = status;

@@ -38,6 +38,7 @@ import {
   ChevronRight,
   ChevronDown,
   Mail,
+  UserCheck,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import SmartMailModule from '@/components/settings/SmartMailModule';
@@ -205,7 +206,7 @@ function SettingsContent() {
     setUserName('');
     setUserEmail('');
     setUserPhone('');
-    setUserRole(isFacilityAdmin ? 'user' : 'it_admin');
+    setUserRole(isFacilityAdmin ? 'user' : (currentUser?.email === 'software.2040@pgel.in' ? 'it_admin' : 'admin'));
     setUserLocationId('');
     const initialPlantIds = isFacilityAdmin
       ? (currentUser?.scope?.plant_ids && currentUser.scope.plant_ids.length > 0
@@ -222,6 +223,22 @@ function SettingsContent() {
   };
 
   const openEditUserModal = (u: User) => {
+    if (u.id === currentUser?.id) {
+      setError('Security Notice: You cannot modify your own administrative account.');
+      setTimeout(() => setError(null), 3500);
+      return;
+    }
+    if (u.email === 'software.2040@pgel.in' && currentUser?.email !== 'software.2040@pgel.in') {
+      setError('Access Denied: The Root Super Admin account is protected.');
+      setTimeout(() => setError(null), 3500);
+      return;
+    }
+    if (isFacilityAdmin && (u.role === 'admin' || u.role === 'it_admin')) {
+      setError('Access Denied: Facility Admins cannot modify administrative accounts.');
+      setTimeout(() => setError(null), 3500);
+      return;
+    }
+
     setEditingUser(u);
     setUserEmpCode(u.emp_code || '');
     setUserName(u.full_name || '');
@@ -315,6 +332,12 @@ function SettingsContent() {
   const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
+    if (editingUser.id === currentUser?.id) {
+      setError('Security Violation: You cannot modify your own administrative account.');
+      setTimeout(() => setError(null), 3500);
+      setEditingUser(null);
+      return;
+    }
     if (!canManageUsers) {
       setError('Access Denied: Only Administrators can modify user accounts');
       return;
@@ -1500,7 +1523,21 @@ function SettingsContent() {
                           </td>
                           <td className="px-3.5 py-2.5 text-right">
                             <div className="flex items-center justify-end gap-1.5">
-                              {canManageUsers ? (
+                              {u.id === currentUser?.id ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg shadow-2xs">
+                                  <UserCheck className="w-3 h-3 text-blue-600" />
+                                  Your Account (You)
+                                </span>
+                              ) : u.email === 'software.2040@pgel.in' && currentUser?.email !== 'software.2040@pgel.in' ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-lg shadow-2xs">
+                                  <ShieldCheck className="w-3 h-3 text-purple-600" />
+                                  Root Admin (Protected)
+                                </span>
+                              ) : isFacilityAdmin && (u.role === 'admin' || u.role === 'it_admin') ? (
+                                <span className="text-[10px] font-bold text-slate-400 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded shadow-2xs">
+                                  Protected
+                                </span>
+                              ) : canManageUsers ? (
                                 <>
                                   <button
                                     type="button"
@@ -2437,7 +2474,9 @@ function SettingsContent() {
                       }}
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-semibold focus:outline-none focus:border-blue-500 cursor-pointer"
                     >
-                      <option value="it_admin">IT ADMIN</option>
+                      {currentUser?.email === 'software.2040@pgel.in' && (
+                        <option value="it_admin">IT ADMIN</option>
+                      )}
                       <option value="admin">ADMIN</option>
                       <option value="user">USER</option>
                     </select>
@@ -2771,7 +2810,9 @@ function SettingsContent() {
                       }}
                       className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-semibold focus:outline-none focus:border-blue-500 cursor-pointer"
                     >
-                      <option value="it_admin">IT ADMIN</option>
+                      {currentUser?.email === 'software.2040@pgel.in' && (
+                        <option value="it_admin">IT ADMIN</option>
+                      )}
                       <option value="admin">ADMIN</option>
                       <option value="user">USER</option>
                     </select>

@@ -1126,41 +1126,6 @@ function AssetWizardContent() {
       .catch((err) => console.error('Failed to load asset for editing:', err));
   }, [searchParams]);
 
-  // Inline Quick Department Creator State & Handler
-  const [showAddDeptInput, setShowAddDeptInput] = useState(false);
-  const [inlineNewDeptName, setInlineNewDeptName] = useState('');
-  const [savingInlineDept, setSavingInlineDept] = useState(false);
-
-  const handleSaveInlineDept = async () => {
-    const name = inlineNewDeptName.trim().toUpperCase();
-    if (!name) return;
-    setSavingInlineDept(true);
-    try {
-      const res = await fetch('/api/settings/departments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          code: `DEPT-${name.slice(0, 3).replace(/[^A-Z]/g, '') || 'GEN'}`,
-          plant_id: newEmpPlantId || plantId || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to create department');
-      const created: Department = data.department;
-      setDepartments((prev) => [...prev, created]);
-      setNewEmpDeptId(created.id);
-      setDepartmentId(created.id);
-      setInlineNewDeptName('');
-      setShowAddDeptInput(false);
-      setSuccessToast(`Department "${created.name}" created and selected!`);
-      setTimeout(() => setSuccessToast(null), 3500);
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Error creating department');
-    } finally {
-      setSavingInlineDept(false);
-    }
-  };
 
   // Auto-Capitalization (CAPS) Helper for all standard text fields
   const handleCapsChange = (setter: (val: string) => void) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -4409,73 +4374,21 @@ function AssetWizardContent() {
               <div className="grid grid-cols-3 gap-3">
                 {/* 5. Department (department_id) */}
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold text-slate-700">
-                      Department *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddDeptInput((prev) => !prev)}
-                      className="text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-0.5 cursor-pointer"
-                    >
-                      <Plus className="w-3 h-3" />
-                      <span>Add New</span>
-                    </button>
-                  </div>
-
-                  {showAddDeptInput ? (
-                    <div className="p-2 rounded-xl bg-blue-50 border border-blue-200 space-y-2 animate-in fade-in duration-150">
-                      <input
-                        type="text"
-                        value={inlineNewDeptName}
-                        onChange={(e) => setInlineNewDeptName(e.target.value.toUpperCase())}
-                        placeholder="New Dept Name"
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold uppercase text-slate-900 focus:outline-none focus:border-blue-500"
-                      />
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowAddDeptInput(false);
-                            setInlineNewDeptName('');
-                          }}
-                          className="px-2 py-1 text-[11px] font-bold text-slate-500 hover:text-slate-800"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          disabled={savingInlineDept || !inlineNewDeptName.trim()}
-                          onClick={handleSaveInlineDept}
-                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold cursor-pointer disabled:opacity-50"
-                        >
-                          {savingInlineDept ? 'Saving...' : 'Save Dept'}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <select
-                      value={newEmpDeptId}
-                      onChange={(e) => {
-                        if (e.target.value === '__ADD_NEW__') {
-                          setShowAddDeptInput(true);
-                        } else {
-                          setNewEmpDeptId(e.target.value);
-                        }
-                      }}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 cursor-pointer"
-                    >
-                      <option value="">Select Department...</option>
-                      {departments.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name}
-                        </option>
-                      ))}
-                      <option value="__ADD_NEW__" className="font-bold text-blue-600 bg-blue-50">
-                        + Add New Department...
+                  <label className="block text-xs font-bold text-slate-700">
+                    Department *
+                  </label>
+                  <select
+                    value={newEmpDeptId}
+                    onChange={(e) => setNewEmpDeptId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="">Select Department...</option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
                       </option>
-                    </select>
-                  )}
+                    ))}
+                  </select>
                 </div>
 
                 {/* 6. Location (location_id) */}

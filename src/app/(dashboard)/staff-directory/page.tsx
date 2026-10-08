@@ -83,10 +83,6 @@ function StaffDirectoryContent() {
   const [submittingEmp, setSubmittingEmp] = useState(false);
   const [empModalError, setEmpModalError] = useState<string | null>(null);
 
-  // Inline Quick Department Creator State & Handler
-  const [showAddDeptInput, setShowAddDeptInput] = useState(false);
-  const [inlineNewDeptName, setInlineNewDeptName] = useState('');
-  const [savingInlineDept, setSavingInlineDept] = useState(false);
 
   // Auto-cascade Plant selection when Location changes in modal
   useEffect(() => {
@@ -144,38 +140,6 @@ function StaffDirectoryContent() {
     return () => window.removeEventListener('aems:open-add-employee', handleOpenAdd);
   }, [locations, plants, departments]);
 
-  const handleSaveInlineDept = async () => {
-    const name = inlineNewDeptName.trim().toUpperCase();
-    if (!name) return;
-    setSavingInlineDept(true);
-    try {
-      const res = await fetch('/api/settings/departments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          code: `DEPT-${name.slice(0, 3).replace(/[^A-Z]/g, '') || 'GEN'}`,
-          plant_id: modalPlantId || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to create department');
-      const created: Department = data.department;
-      setDepartments((prev) => [...prev, created]);
-      setModalDeptId(created.id);
-      setInlineNewDeptName('');
-      setShowAddDeptInput(false);
-      setNotification({
-        type: 'success',
-        message: `Department "${created.name}" created successfully!`,
-      });
-      setTimeout(() => setNotification(null), 3500);
-    } catch (err: unknown) {
-      setEmpModalError(err instanceof Error ? err.message : 'Error creating department');
-    } finally {
-      setSavingInlineDept(false);
-    }
-  };
 
   const handleSaveEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1229,76 +1193,24 @@ function StaffDirectoryContent() {
                   </select>
                 </div>
 
-                {/* 7. Department with Inline Add New */}
+                {/* 7. Department */}
                 <div className="sm:col-span-2">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-slate-700">
-                      Department *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddDeptInput((prev) => !prev)}
-                      className="text-[11px] text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 cursor-pointer"
-                    >
-                      <Plus className="w-3 h-3" />
-                      <span>{showAddDeptInput ? 'Choose from list' : '+ Add New Department'}</span>
-                    </button>
-                  </div>
-
-                  {showAddDeptInput ? (
-                    <div className="p-2.5 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2 animate-in fade-in duration-150">
-                      <input
-                        type="text"
-                        value={inlineNewDeptName}
-                        onChange={(e) => setInlineNewDeptName(e.target.value.toUpperCase())}
-                        placeholder="NEW DEPARTMENT NAME (e.g. QUALITY ASSURANCE)"
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold uppercase text-slate-900 focus:outline-none focus:border-blue-500"
-                      />
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowAddDeptInput(false);
-                            setInlineNewDeptName('');
-                          }}
-                          className="px-2 py-1 text-[11px] font-bold text-slate-500 hover:text-slate-800"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          disabled={savingInlineDept || !inlineNewDeptName.trim()}
-                          onClick={handleSaveInlineDept}
-                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold cursor-pointer disabled:opacity-50"
-                        >
-                          {savingInlineDept ? 'Saving...' : 'Save Department'}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <select
-                      required
-                      value={modalDeptId}
-                      onChange={(e) => {
-                        if (e.target.value === '__ADD_NEW__') {
-                          setShowAddDeptInput(true);
-                        } else {
-                          setModalDeptId(e.target.value);
-                        }
-                      }}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer"
-                    >
-                      <option value="">Select Department...</option>
-                      {departments.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name}
-                        </option>
-                      ))}
-                      <option value="__ADD_NEW__" className="font-bold text-blue-600 bg-blue-50">
-                        + Add New Department...
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Department *
+                  </label>
+                  <select
+                    required
+                    value={modalDeptId}
+                    onChange={(e) => setModalDeptId(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="">Select Department...</option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
                       </option>
-                    </select>
-                  )}
+                    ))}
+                  </select>
                 </div>
 
                 {/* 8. Designation */}
