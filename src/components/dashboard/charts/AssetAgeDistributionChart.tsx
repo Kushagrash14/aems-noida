@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Hourglass } from 'lucide-react';
 import { Asset } from '@/types/database';
 import { formatCompactNumber } from '@/lib/utils';
 import ChartCard from './ChartCard';
@@ -56,7 +57,8 @@ export default function AssetAgeDistributionChart({ assets }: AssetAgeDistributi
 
   return (
     <ChartCard
-      emoji="⏳"
+      icon={Hourglass}
+      iconClassName="bg-amber-50 text-amber-600"
       title="Assets by Age"
       action={
         <div className="flex items-center gap-2 shrink-0">

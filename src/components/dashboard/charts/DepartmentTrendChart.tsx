@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Building2 } from 'lucide-react';
 import { Asset, Department } from '@/types/database';
 import ChartCard, { EmptyState } from './ChartCard';
 import MetricStrip from './MetricStrip';
@@ -52,7 +53,12 @@ export default function DepartmentTrendChart({ assets, departments }: Department
   };
 
   return (
-    <ChartCard emoji="🏢" title="Department-wise Trend" action={<TrendModeToggle mode={mode} onChange={setMode} />}>
+    <ChartCard
+      icon={Building2}
+      iconClassName="bg-purple-50 text-purple-600"
+      title="Department-wise Trend"
+      action={<TrendModeToggle mode={mode} onChange={setMode} />}
+    >
       <MetricStrip
         key={`m-${mode}`}
         items={[

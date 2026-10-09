@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Factory } from 'lucide-react';
 import { Asset, Plant } from '@/types/database';
 import ChartCard, { EmptyState } from './ChartCard';
 import { CountUp } from './useCountUp';
@@ -118,7 +118,8 @@ export default function AssetPlantChart({ assets, plants }: AssetPlantChartProps
 
   return (
     <ChartCard
-      emoji="🏭"
+      icon={Factory}
+      iconClassName="bg-indigo-50 text-indigo-600"
       title="Assets by Plant"
       action={
         <div className="flex items-center gap-2 shrink-0">

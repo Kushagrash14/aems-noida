@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { TrendingUp } from 'lucide-react';
 import { Asset } from '@/types/database';
 import ChartCard, { EmptyState } from './ChartCard';
 import MetricStrip from './MetricStrip';
@@ -42,7 +43,8 @@ export default function AssetTrendChart({ assets }: AssetTrendChartProps) {
 
   return (
     <ChartCard
-      emoji="📈"
+      icon={TrendingUp}
+      iconClassName="bg-indigo-50 text-indigo-600"
       title="Total Asset Trend"
       action={
         <div className="flex items-center gap-2 shrink-0">

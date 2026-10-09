@@ -10,6 +10,7 @@ import {
   Wrench,
   Filter,
   IndianRupee,
+  ChevronRight,
 } from 'lucide-react';
 import {
   Asset,
@@ -116,30 +117,30 @@ export default function DashboardKPISection({
   return (
     <>
       {/* Full-Bleed 100% Solid Opaque Sticky Shield Connected Directly to Navbar */}
-      <div className="sticky top-0 z-20 bg-[#F5F4F0] -mx-3 sm:-mx-4 lg:-mx-5 px-3 sm:px-4 lg:px-5 pt-2 pb-2.5 border-b border-slate-300 shadow-xs">
-        <div className="w-full max-w-[1920px] mx-auto grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2 sm:gap-2.5">
+      <div className="sticky top-0 z-20 bg-[#F5F4F0] -mx-3 sm:-mx-4 lg:-mx-5 px-3 sm:px-4 lg:px-5 pt-1.5 pb-2 border-b border-slate-200 shadow-xs">
+        <div className="w-full max-w-[1920px] mx-auto grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-1.5 sm:gap-2">
           {/* Card 1: TOTAL ASSETS */}
           <button
             type="button"
             onClick={() => setActiveModal('total')}
-            className="text-left bg-white rounded-xl p-2.5 border-2 border-blue-500 shadow-xs flex flex-col justify-between min-h-[72px] transition-all hover:shadow-md hover:scale-[1.015] hover:border-blue-600 cursor-pointer group"
+            className="text-left bg-white rounded-lg p-2 sm:px-2.5 sm:py-2 border border-blue-500/80 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col justify-between min-h-[58px] transition-all hover:shadow-xs hover:border-blue-600 cursor-pointer group ring-1 ring-blue-500/15"
             title="Click to view all assets & filter dept/plant/location"
           >
             <div className="flex items-center justify-between w-full">
-              <span className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider group-hover:text-blue-600 transition-colors">
+              <span className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-blue-600 transition-colors truncate pr-1">
                 TOTAL ASSETS
               </span>
-              <div className="h-5 w-5 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+              <div className="h-4.5 w-4.5 rounded bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                 <Box className="w-3 h-3" />
               </div>
             </div>
             <div className="flex items-baseline justify-between w-full mt-1">
-              <div className="text-lg sm:text-xl font-black text-slate-900 tracking-tight leading-none">
+              <div className="text-base sm:text-lg font-black text-slate-900 tracking-tight leading-none">
                 {totalAssetsCount}
               </div>
-              <span className="text-[9px] font-bold text-blue-600 group-hover:underline inline-flex items-center gap-0.5">
-                <Filter className="w-2.5 h-2.5" />
-                <span>Filter -&gt;</span>
+              <span className="text-[9px] font-semibold text-slate-400 group-hover:text-blue-600 inline-flex items-center gap-0.5 transition-colors">
+                <span>View</span>
+                <ChevronRight className="w-2.5 h-2.5 group-hover:translate-x-0.5 transition-transform" />
               </span>
             </div>
           </button>
@@ -148,24 +149,24 @@ export default function DashboardKPISection({
           <button
             type="button"
             onClick={() => setActiveModal('assigned')}
-            className="text-left bg-white rounded-xl p-2.5 border border-slate-200/90 shadow-xs flex flex-col justify-between min-h-[72px] transition-all hover:shadow-md hover:scale-[1.015] hover:border-blue-400 cursor-pointer group"
+            className="text-left bg-white rounded-lg p-2 sm:px-2.5 sm:py-2 border border-slate-200/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col justify-between min-h-[58px] transition-all hover:shadow-xs hover:border-blue-400 cursor-pointer group"
             title="Click to view assigned assets & filter dept/plant/location"
           >
             <div className="flex items-center justify-between w-full">
-              <span className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider group-hover:text-blue-600 transition-colors">
+              <span className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-blue-600 transition-colors truncate pr-1">
                 ASSIGNED / IN USE
               </span>
-              <div className="h-5 w-5 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+              <div className="h-4.5 w-4.5 rounded bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                 <User className="w-3 h-3" />
               </div>
             </div>
             <div className="flex items-baseline justify-between w-full mt-1">
-              <div className="text-lg sm:text-xl font-black text-blue-600 tracking-tight leading-none">
+              <div className="text-base sm:text-lg font-black text-blue-600 tracking-tight leading-none">
                 {assignedCount}
               </div>
-              <span className="text-[9px] font-bold text-blue-600 group-hover:underline inline-flex items-center gap-0.5">
-                <Filter className="w-2.5 h-2.5" />
-                <span>Filter -&gt;</span>
+              <span className="text-[9px] font-semibold text-slate-400 group-hover:text-blue-600 inline-flex items-center gap-0.5 transition-colors">
+                <span>View</span>
+                <ChevronRight className="w-2.5 h-2.5 group-hover:translate-x-0.5 transition-transform" />
               </span>
             </div>
           </button>
@@ -174,24 +175,24 @@ export default function DashboardKPISection({
           <button
             type="button"
             onClick={() => setActiveModal('available')}
-            className="text-left bg-white rounded-xl p-2.5 border border-slate-200/90 shadow-xs flex flex-col justify-between min-h-[72px] transition-all hover:shadow-md hover:scale-[1.015] hover:border-emerald-400 cursor-pointer group"
+            className="text-left bg-white rounded-lg p-2 sm:px-2.5 sm:py-2 border border-slate-200/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col justify-between min-h-[58px] transition-all hover:shadow-xs hover:border-emerald-400 cursor-pointer group"
             title="Click to view available pool assets & filter dept/plant/location"
           >
             <div className="flex items-center justify-between w-full">
-              <span className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider group-hover:text-emerald-600 transition-colors">
+              <span className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-emerald-600 transition-colors truncate pr-1">
                 AVAILABLE / STOCK
               </span>
-              <div className="h-5 w-5 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+              <div className="h-4.5 w-4.5 rounded bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
                 <CheckCircle2 className="w-3 h-3" />
               </div>
             </div>
             <div className="flex items-baseline justify-between w-full mt-1">
-              <div className="text-lg sm:text-xl font-black text-emerald-600 tracking-tight leading-none">
+              <div className="text-base sm:text-lg font-black text-emerald-600 tracking-tight leading-none">
                 {availableCount}
               </div>
-              <span className="text-[9px] font-bold text-emerald-600 group-hover:underline inline-flex items-center gap-0.5">
-                <Filter className="w-2.5 h-2.5" />
-                <span>Filter -&gt;</span>
+              <span className="text-[9px] font-semibold text-slate-400 group-hover:text-emerald-600 inline-flex items-center gap-0.5 transition-colors">
+                <span>View</span>
+                <ChevronRight className="w-2.5 h-2.5 group-hover:translate-x-0.5 transition-transform" />
               </span>
             </div>
           </button>
@@ -200,24 +201,24 @@ export default function DashboardKPISection({
           <button
             type="button"
             onClick={() => setActiveModal('cost')}
-            className="text-left bg-white rounded-xl p-2.5 border border-slate-200/90 shadow-xs flex flex-col justify-between min-h-[72px] transition-all hover:shadow-md hover:scale-[1.015] hover:border-emerald-500 cursor-pointer group"
+            className="text-left bg-white rounded-lg p-2 sm:px-2.5 sm:py-2 border border-slate-200/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col justify-between min-h-[58px] transition-all hover:shadow-xs hover:border-emerald-400 cursor-pointer group"
             title="Click to view gross purchase cost valuation"
           >
             <div className="flex items-center justify-between w-full">
-              <span className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider group-hover:text-emerald-600 transition-colors truncate pr-1">
+              <span className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-emerald-600 transition-colors truncate pr-1">
                 GROSS ASSET COST
               </span>
-              <div className="h-5 w-5 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+              <div className="h-4.5 w-4.5 rounded bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
                 <IndianRupee className="w-3 h-3" />
               </div>
             </div>
             <div className="flex items-baseline justify-between w-full mt-1">
-              <div className="text-sm sm:text-base font-black text-emerald-700 tracking-tight leading-none truncate">
+              <div className="text-xs sm:text-sm font-black text-emerald-700 tracking-tight leading-none truncate" title={formatCurrency(totalCost)}>
                 {formatCurrency(totalCost)}
               </div>
-              <span className="text-[9px] font-bold text-emerald-600 group-hover:underline inline-flex items-center gap-0.5 shrink-0 ml-1">
-                <Filter className="w-2.5 h-2.5" />
-                <span>Filter -&gt;</span>
+              <span className="text-[9px] font-semibold text-slate-400 group-hover:text-emerald-600 inline-flex items-center gap-0.5 shrink-0 ml-1 transition-colors">
+                <span>Val</span>
+                <ChevronRight className="w-2.5 h-2.5 group-hover:translate-x-0.5 transition-transform" />
               </span>
             </div>
           </button>
@@ -226,23 +227,24 @@ export default function DashboardKPISection({
           <button
             type="button"
             onClick={() => setActiveModal('cost')}
-            className="text-left bg-white rounded-xl p-2.5 border border-slate-200/90 shadow-xs flex flex-col justify-between min-h-[72px] transition-all hover:shadow-md hover:scale-[1.015] hover:border-blue-500 cursor-pointer group"
+            className="text-left bg-white rounded-lg p-2 sm:px-2.5 sm:py-2 border border-slate-200/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col justify-between min-h-[58px] transition-all hover:shadow-xs hover:border-blue-400 cursor-pointer group"
             title="Click to view straight-line depreciated book equity"
           >
             <div className="flex items-center justify-between w-full">
-              <span className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider group-hover:text-blue-600 transition-colors truncate pr-1">
+              <span className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-blue-600 transition-colors truncate pr-1">
                 BOOK VALUE (DEP)
               </span>
-              <div className="h-5 w-5 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+              <div className="h-4.5 w-4.5 rounded bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                 <IndianRupee className="w-3 h-3" />
               </div>
             </div>
             <div className="flex items-baseline justify-between w-full mt-1">
-              <div className="text-sm sm:text-base font-black text-blue-700 tracking-tight leading-none truncate">
+              <div className="text-xs sm:text-sm font-black text-blue-700 tracking-tight leading-none truncate" title={formatCurrency(netBookValue)}>
                 {formatCurrency(netBookValue)}
               </div>
-              <span className="text-[9px] font-bold text-blue-600 group-hover:underline inline-flex items-center gap-0.5 shrink-0 ml-1">
-                <span>Net Val</span>
+              <span className="text-[9px] font-semibold text-slate-400 group-hover:text-blue-600 inline-flex items-center gap-0.5 shrink-0 ml-1 transition-colors">
+                <span>Net</span>
+                <ChevronRight className="w-2.5 h-2.5 group-hover:translate-x-0.5 transition-transform" />
               </span>
             </div>
           </button>
@@ -251,24 +253,24 @@ export default function DashboardKPISection({
           <button
             type="button"
             onClick={() => setActiveModal('maintenance')}
-            className="text-left bg-white rounded-xl p-2.5 border border-slate-200/90 shadow-xs flex flex-col justify-between min-h-[72px] transition-all hover:shadow-md hover:scale-[1.015] hover:border-amber-400 cursor-pointer group"
+            className="text-left bg-white rounded-lg p-2 sm:px-2.5 sm:py-2 border border-slate-200/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col justify-between min-h-[58px] transition-all hover:shadow-xs hover:border-amber-400 cursor-pointer group"
             title="Click to view maintenance equipment & filter dept/plant/location"
           >
             <div className="flex items-center justify-between w-full">
-              <span className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider group-hover:text-amber-600 transition-colors">
+              <span className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-amber-600 transition-colors truncate pr-1">
                 MAINTENANCE
               </span>
-              <div className="h-5 w-5 rounded-md bg-amber-50 text-amber-500 flex items-center justify-center shrink-0 group-hover:bg-amber-500 group-hover:text-white transition-colors">
+              <div className="h-4.5 w-4.5 rounded bg-amber-50 text-amber-500 flex items-center justify-center shrink-0 group-hover:bg-amber-500 group-hover:text-white transition-colors">
                 <AlertTriangle className="w-3 h-3" />
               </div>
             </div>
             <div className="flex items-baseline justify-between w-full mt-1">
-              <div className="text-lg sm:text-xl font-black text-amber-500 tracking-tight leading-none">
+              <div className="text-base sm:text-lg font-black text-amber-500 tracking-tight leading-none">
                 {maintenanceCount}
               </div>
-              <span className="text-[9px] font-bold text-amber-600 group-hover:underline inline-flex items-center gap-0.5">
-                <Filter className="w-2.5 h-2.5" />
-                <span>Filter -&gt;</span>
+              <span className="text-[9px] font-semibold text-slate-400 group-hover:text-amber-600 inline-flex items-center gap-0.5 transition-colors">
+                <span>View</span>
+                <ChevronRight className="w-2.5 h-2.5 group-hover:translate-x-0.5 transition-transform" />
               </span>
             </div>
           </button>
@@ -277,24 +279,24 @@ export default function DashboardKPISection({
           <button
             type="button"
             onClick={() => setActiveModal('damaged')}
-            className="text-left bg-white rounded-xl p-2.5 border border-slate-200/90 shadow-xs flex flex-col justify-between min-h-[72px] transition-all hover:shadow-md hover:scale-[1.015] hover:border-rose-400 cursor-pointer group"
+            className="text-left bg-white rounded-lg p-2 sm:px-2.5 sm:py-2 border border-slate-200/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col justify-between min-h-[58px] transition-all hover:shadow-xs hover:border-rose-400 cursor-pointer group"
             title="Click to view damaged & scrapped assets"
           >
             <div className="flex items-center justify-between w-full">
-              <span className="text-[9px] font-extrabold text-rose-600 uppercase tracking-wider group-hover:text-rose-700 transition-colors truncate">
+              <span className="text-[9.5px] font-bold text-rose-600 uppercase tracking-wider group-hover:text-rose-700 transition-colors truncate pr-1">
                 SCRAP / DAMAGED
               </span>
-              <div className="h-5 w-5 rounded-md bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 group-hover:bg-rose-600 group-hover:text-white transition-colors">
+              <div className="h-4.5 w-4.5 rounded bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 group-hover:bg-rose-600 group-hover:text-white transition-colors">
                 <Wrench className="w-3 h-3" />
               </div>
             </div>
             <div className="flex items-baseline justify-between w-full mt-1">
-              <div className="text-lg sm:text-xl font-black text-rose-600 tracking-tight leading-none">
+              <div className="text-base sm:text-lg font-black text-rose-600 tracking-tight leading-none">
                 {damagedAndScrapCount}
               </div>
-              <span className="text-[9px] font-bold text-rose-600 group-hover:underline inline-flex items-center gap-0.5">
-                <Filter className="w-2.5 h-2.5" />
-                <span>Filter -&gt;</span>
+              <span className="text-[9px] font-semibold text-slate-400 group-hover:text-rose-600 inline-flex items-center gap-0.5 transition-colors">
+                <span>View</span>
+                <ChevronRight className="w-2.5 h-2.5 group-hover:translate-x-0.5 transition-transform" />
               </span>
             </div>
           </button>
@@ -303,24 +305,24 @@ export default function DashboardKPISection({
           <button
             type="button"
             onClick={() => setActiveModal('missing')}
-            className="text-left bg-white rounded-xl p-2.5 border border-slate-200/90 shadow-xs flex flex-col justify-between min-h-[72px] transition-all hover:shadow-md hover:scale-[1.015] hover:border-purple-400 cursor-pointer group"
+            className="text-left bg-white rounded-lg p-2 sm:px-2.5 sm:py-2 border border-slate-200/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col justify-between min-h-[58px] transition-all hover:shadow-xs hover:border-purple-400 cursor-pointer group"
             title="Click to view missing or untraceable assets"
           >
             <div className="flex items-center justify-between w-full">
-              <span className="text-[9px] font-extrabold text-purple-600 uppercase tracking-wider group-hover:text-purple-700 transition-colors truncate">
+              <span className="text-[9.5px] font-bold text-purple-600 uppercase tracking-wider group-hover:text-purple-700 transition-colors truncate pr-1">
                 MISSING / LOST
               </span>
-              <div className="h-5 w-5 rounded-md bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+              <div className="h-4.5 w-4.5 rounded bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 group-hover:bg-purple-600 group-hover:text-white transition-colors">
                 <HelpCircle className="w-3 h-3" />
               </div>
             </div>
             <div className="flex items-baseline justify-between w-full mt-1">
-              <div className="text-lg sm:text-xl font-black text-purple-600 tracking-tight leading-none">
+              <div className="text-base sm:text-lg font-black text-purple-600 tracking-tight leading-none">
                 {missingCount}
               </div>
-              <span className="text-[9px] font-bold text-purple-600 group-hover:underline inline-flex items-center gap-0.5">
-                <Filter className="w-2.5 h-2.5" />
-                <span>Filter -&gt;</span>
+              <span className="text-[9px] font-semibold text-slate-400 group-hover:text-purple-600 inline-flex items-center gap-0.5 transition-colors">
+                <span>View</span>
+                <ChevronRight className="w-2.5 h-2.5 group-hover:translate-x-0.5 transition-transform" />
               </span>
             </div>
           </button>

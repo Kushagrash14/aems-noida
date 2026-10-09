@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { IndianRupee } from 'lucide-react';
 import { Asset, Plant } from '@/types/database';
 import ChartCard, { EmptyState } from './ChartCard';
 import BarChartFrame, { BarGroup } from './BarChartFrame';
@@ -75,7 +76,8 @@ export default function AssetValueByPlantChart({ assets, plants }: AssetValueByP
 
   return (
     <ChartCard
-      emoji="💰"
+      icon={IndianRupee}
+      iconClassName="bg-emerald-50 text-emerald-600"
       title="Asset Value by Plant"
       action={
         <div className="hidden sm:flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 leading-none shadow-sm shrink-0">

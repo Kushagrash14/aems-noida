@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
+import { Building2 } from 'lucide-react';
 import { Asset, Department } from '@/types/database';
 import ChartCard, { EmptyState } from './ChartCard';
 import { CountUp } from './useCountUp';
@@ -68,7 +69,8 @@ export default function AssetDepartmentChart({ assets, departments }: AssetDepar
 
   return (
     <ChartCard
-      emoji="🏢"
+      icon={Building2}
+      iconClassName="bg-blue-50 text-blue-600"
       title="Assets by Department"
       action={
         <div
