@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef, use, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Asset, User, Employee, Department } from '@/types/database';
@@ -42,11 +42,10 @@ import {
   Server,
 } from 'lucide-react';
 
-function AssetDetailContent({ params }: { params?: Promise<{ id: string }> }) {
+function AssetDetailContent() {
   const router = useRouter();
-  const unwrappedParams = params ? (use(params) as { id?: string }) : null;
   const navParams = useParams();
-  const assetId = ((unwrappedParams?.id || navParams?.id || '') as string);
+  const assetId = ((navParams?.id || '') as string);
 
   const [asset, setAsset] = useState<Asset | null>(null);
   const [history, setHistory] = useState<AssetHistoryRecord[]>([]);
@@ -165,6 +164,17 @@ function AssetDetailContent({ params }: { params?: Promise<{ id: string }> }) {
       )
       .slice(0, 10);
   }, [employees, assignEmpQuery]);
+
+  // Dynamic metadata extraction (from invoice_document_path if stored as JSON)
+  const parsedMeta = useMemo(() => {
+    if (!asset?.invoice_document_path || typeof asset.invoice_document_path !== 'string') return null;
+    if (!asset.invoice_document_path.trim().startsWith('{')) return null;
+    try {
+      return JSON.parse(asset.invoice_document_path);
+    } catch {
+      return null;
+    }
+  }, [asset?.invoice_document_path]);
 
   const reloadAssetFromServer = async () => {
     try {
@@ -373,17 +383,6 @@ function AssetDetailContent({ params }: { params?: Promise<{ id: string }> }) {
         }, {})
       : asset.custom_values) || {}),
   };
-
-  // Dynamic metadata extraction (from invoice_document_path if stored as JSON)
-  const parsedMeta = useMemo(() => {
-    if (!asset?.invoice_document_path || typeof asset.invoice_document_path !== 'string') return null;
-    if (!asset.invoice_document_path.trim().startsWith('{')) return null;
-    try {
-      return JSON.parse(asset.invoice_document_path);
-    } catch {
-      return null;
-    }
-  }, [asset?.invoice_document_path]);
 
   const sapAssetCode = asset.sap_asset_code || parsedMeta?.sap_asset_code || null;
   const invoiceNumber = asset.invoice_number || parsedMeta?.invoice_number || null;
@@ -1621,7 +1620,7 @@ function AssetDetailContent({ params }: { params?: Promise<{ id: string }> }) {
   );
 }
 
-export default function AssetDetailPage({ params }: { params?: Promise<{ id: string }> }) {
+export default function AssetDetailPage() {
   return (
     <Suspense
       fallback={
@@ -1631,7 +1630,7 @@ export default function AssetDetailPage({ params }: { params?: Promise<{ id: str
         </div>
       }
     >
-      <AssetDetailContent params={params} />
+      <AssetDetailContent />
     </Suspense>
   );
 }
