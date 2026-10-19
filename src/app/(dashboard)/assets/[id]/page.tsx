@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, use, Suspense } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Asset, User, Employee, Department } from '@/types/database';
@@ -42,10 +42,11 @@ import {
   Server,
 } from 'lucide-react';
 
-export default function AssetDetailPage() {
-  const params = useParams();
+function AssetDetailContent({ params }: { params?: Promise<{ id: string }> }) {
   const router = useRouter();
-  const assetId = params?.id as string;
+  const unwrappedParams = params ? (use(params) as { id?: string }) : null;
+  const navParams = useParams();
+  const assetId = ((unwrappedParams?.id || navParams?.id || '') as string);
 
   const [asset, setAsset] = useState<Asset | null>(null);
   const [history, setHistory] = useState<AssetHistoryRecord[]>([]);
@@ -158,9 +159,9 @@ export default function AssetDetailPage() {
     return employees
       .filter(
         (e) =>
-          e.emp_code.toLowerCase().includes(q) ||
-          e.full_name.toLowerCase().includes(q) ||
-          e.department?.name?.toLowerCase().includes(q)
+          (e.emp_code || '').toLowerCase().includes(q) ||
+          (e.full_name || '').toLowerCase().includes(q) ||
+          (e.department?.name || '').toLowerCase().includes(q)
       )
       .slice(0, 10);
   }, [employees, assignEmpQuery]);
@@ -354,7 +355,7 @@ export default function AssetDetailPage() {
     ? 'Available in Stock'
     : hasEmp
     ? 'Assigned'
-    : asset.status.toUpperCase();
+    : (asset.status ? String(asset.status).toUpperCase() : 'IN USE');
   const conditionDisplay = (asset as any).condition === 'existing_asset'
     ? 'EXISTING ASSETS'
     : (asset as any).condition === 'new_purchase' || asset.po_number
@@ -422,7 +423,7 @@ export default function AssetDetailPage() {
               {/* Badges Row */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-600 text-[10px] font-mono font-black tracking-wider uppercase border border-blue-200">
-                  SYS ID: {asset.id.slice(0, 4).toUpperCase()}
+                  SYS ID: {asset.id ? asset.id.slice(0, 4).toUpperCase() : 'N/A'}
                 </span>
                 <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-mono font-black tracking-wider uppercase border border-slate-200">
                   {asset.asset_tag}
@@ -719,12 +720,12 @@ export default function AssetDetailPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-blue-600 text-white font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
-                  {asset.assigned_employee.full_name.charAt(0)}
+                  {((asset.assigned_employee.full_name || asset.assigned_employee.emp_code || 'U').trim()[0] || 'U').toUpperCase()}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-black text-slate-900 text-sm">
-                      {asset.assigned_employee.full_name}
+                      {asset.assigned_employee.full_name || 'Assigned Custodian'}
                     </span>
                     <span className="font-mono text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                       {asset.assigned_employee.emp_code}
@@ -951,7 +952,9 @@ export default function AssetDetailPage() {
                     {cv.field?.field_label || cv.field_id}
                   </span>
                   <span className="font-black text-slate-900 text-xs uppercase mt-0.5 block">
-                    {cv.field_value || '—'}
+                    {typeof cv.field_value === 'object' && cv.field_value !== null
+                      ? JSON.stringify(cv.field_value)
+                      : String(cv.field_value ?? '—')}
                   </span>
                 </div>
               ))}
@@ -1615,5 +1618,20 @@ export default function AssetDetailPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AssetDetailPage({ params }: { params?: Promise<{ id: string }> }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="max-w-5xl mx-auto py-12 flex flex-col items-center justify-center space-y-3">
+          <div className="h-8 w-8 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+          <p className="text-xs font-semibold text-slate-500">Loading asset dossier...</p>
+        </div>
+      }
+    >
+      <AssetDetailContent params={params} />
+    </Suspense>
   );
 }

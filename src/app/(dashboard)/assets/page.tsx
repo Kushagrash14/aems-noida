@@ -174,7 +174,7 @@ function AssetsDirectoryContent() {
 
       if (meRes && meRes.ok) {
         const d = await meRes.json();
-        if (d.user) setCurrentUser(d.user);
+        if (d.user) setCurrentUser(d.scope ? { ...d.user, scope: d.scope } : d.user);
       }
     } catch (err) {
       console.error('Failed to load asset directory:', err);

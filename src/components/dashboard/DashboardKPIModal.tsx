@@ -1301,6 +1301,7 @@ export default function DashboardKPIModal({
 
                             <Link
                               href={`/assets/${asset.id}`}
+                              onClick={() => onClose()}
                               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white border border-blue-200 transition-all font-bold text-[11px] cursor-pointer"
                             >
                               <span>View</span>

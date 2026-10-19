@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAssets, getAssetById, createAsset, resolveCategoryIdByName, inferItCategoryName } from '@/lib/store';
+import { getAssets, getAssetById, getPlants, createAsset, resolveCategoryIdByName, inferItCategoryName } from '@/lib/store';
 import { validateSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth/session';
 import { canUserEdit, isEntityInUserScope } from '@/lib/permissions';
 import { logAuditEvent } from '@/lib/audit';
@@ -86,9 +86,9 @@ export async function POST(req: NextRequest) {
       if (resolvedCatId) asset.category_id = resolvedCatId;
     }
 
-    // For Facility Admin or User, enforce their assigned location, plant, and department
+    // Enforce assigned location, plant, and department based on user role and multi-plant scope
+    const allPlants = await getPlants();
     if (validation.user.role !== 'it_admin') {
-      if (validation.user.location_id) asset.current_location_id = validation.user.location_id;
       if (validation.scope?.plant_ids && validation.scope.plant_ids.length > 0) {
         if (!asset.current_plant_id || !validation.scope.plant_ids.includes(asset.current_plant_id)) {
           asset.current_plant_id = validation.scope.plant_ids[0];
@@ -96,7 +96,26 @@ export async function POST(req: NextRequest) {
       } else if (validation.user.plant_id) {
         asset.current_plant_id = validation.user.plant_id;
       }
-      if (validation.user.department_id) asset.current_department_id = validation.user.department_id;
+
+      // Sync location to chosen plant
+      const chosenPlant = allPlants.find((p) => p.id === asset.current_plant_id);
+      if (chosenPlant?.location_id) {
+        asset.current_location_id = chosenPlant.location_id;
+      } else if (validation.user.location_id) {
+        asset.current_location_id = validation.user.location_id;
+      }
+
+      if (!asset.current_department_id && validation.user.department_id) {
+        asset.current_department_id = validation.user.department_id;
+      }
+    } else {
+      // For IT Admin, ensure location matches chosen plant if not explicitly provided
+      if (!asset.current_location_id && asset.current_plant_id) {
+        const chosenPlant = allPlants.find((p) => p.id === asset.current_plant_id);
+        if (chosenPlant?.location_id) {
+          asset.current_location_id = chosenPlant.location_id;
+        }
+      }
     }
 
     if (!asset.name || !asset.category_id || !asset.current_location_id || !asset.current_plant_id || !asset.current_department_id) {

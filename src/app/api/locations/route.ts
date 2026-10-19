@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getLocations, createLocation } from '@/lib/store';
+import { getLocations, getPlants, createLocation } from '@/lib/store';
 import { validateSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth/session';
 import { logAuditEvent } from '@/lib/audit';
 
@@ -15,10 +15,20 @@ export async function GET(req: NextRequest) {
 
   const currentUser = validation.user;
   if (currentUser.role !== 'it_admin') {
-    if (currentUser.location_id) {
-      locations = locations.filter((l) => l.id === currentUser.location_id);
-    } else if (validation.scope?.location_ids && validation.scope.location_ids.length > 0) {
+    if (validation.scope?.location_ids && validation.scope.location_ids.length > 0) {
       locations = locations.filter((l) => validation.scope!.location_ids!.includes(l.id));
+    } else if (validation.scope?.plant_ids && validation.scope.plant_ids.length > 0) {
+      const allPlants = await getPlants();
+      const scopedLocIds = new Set(
+        allPlants
+          .filter((p) => validation.scope!.plant_ids!.includes(p.id))
+          .map((p) => p.location_id)
+          .filter(Boolean)
+      );
+      if (currentUser.location_id) scopedLocIds.add(currentUser.location_id);
+      locations = locations.filter((l) => scopedLocIds.has(l.id));
+    } else if (currentUser.location_id) {
+      locations = locations.filter((l) => l.id === currentUser.location_id);
     }
   }
 

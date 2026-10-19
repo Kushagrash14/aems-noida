@@ -374,34 +374,6 @@ function AssetWizardContent() {
     return currentUser?.role === 'it_admin';
   }, [currentUser]);
 
-  // Scoped departments available to the current user
-  const availableDepartments = useMemo(() => {
-    if (!currentUser || currentUser.role === 'it_admin') return departments;
-    if (currentUser.department_id) {
-      return departments.filter((d) => d.id === currentUser.department_id);
-    }
-    if (currentUser.scope?.department_ids && currentUser.scope.department_ids.length > 0) {
-      return departments.filter((d) => currentUser.scope!.department_ids!.includes(d.id));
-    }
-    if (currentUser.plant_id) {
-      return departments.filter((d) => !d.plant_id || d.plant_id === currentUser.plant_id);
-    }
-    return departments;
-  }, [departments, currentUser]);
-
-  // Check if department is locked for current user (Facility Admin & Floor Users locked to their assigned dept)
-  const isDeptLockedForUser = useMemo(() => {
-    if (!currentUser) return false;
-    // IT Admin has cross-department access
-    if (currentUser.role === 'it_admin') return false;
-    // Facility Admins and Users are locked to their assigned department
-    return Boolean(
-      currentUser.department_id ||
-      (currentUser.scope?.department_ids && currentUser.scope.department_ids.length <= 1) ||
-      availableDepartments.length <= 1
-    );
-  }, [currentUser, availableDepartments]);
-
 
   // Form State: Step 2 (Base Identification, Commercial & Attachments)
   const [manufacturer, setManufacturer] = useState('');
@@ -917,6 +889,71 @@ function AssetWizardContent() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [plants, setPlants] = useState<Plant[]>([]);
 
+  // Allowed plants based on user privileges and assigned multi-plant scopes
+  const allowedPlants = useMemo(() => {
+    if (!currentUser || currentUser.role === 'it_admin') return plants;
+    if (currentUser.scope?.plant_ids && currentUser.scope.plant_ids.length > 0) {
+      const scoped = plants.filter((p) => currentUser.scope!.plant_ids!.includes(p.id));
+      if (scoped.length > 0) return scoped;
+    }
+    if (currentUser.plant_id) {
+      const p = plants.filter((pl) => pl.id === currentUser.plant_id);
+      if (p.length > 0) return p;
+    }
+    return plants;
+  }, [plants, currentUser]);
+
+  // Allowed locations based on allowed plants and user scope
+  const allowedLocations = useMemo(() => {
+    if (!currentUser || currentUser.role === 'it_admin') return locations;
+    const allowedLocIds = new Set<string>();
+    allowedPlants.forEach((p) => {
+      if (p.location_id) allowedLocIds.add(p.location_id);
+    });
+    if (currentUser.scope?.location_ids) {
+      currentUser.scope.location_ids.forEach((id) => allowedLocIds.add(id));
+    }
+    if (currentUser.location_id) allowedLocIds.add(currentUser.location_id);
+    const filtered = locations.filter((l) => allowedLocIds.has(l.id));
+    return filtered.length > 0 ? filtered : locations;
+  }, [locations, allowedPlants, currentUser]);
+
+  // Scoped departments available to the current user (cascaded by selected plantId)
+  const availableDepartments = useMemo(() => {
+    if (!currentUser || currentUser.role === 'it_admin') {
+      if (plantId) {
+        return departments.filter((d) => !d.plant_id || d.plant_id === plantId);
+      }
+      return departments;
+    }
+    if (currentUser.department_id) {
+      return departments.filter((d) => d.id === currentUser.department_id);
+    }
+    if (currentUser.scope?.department_ids && currentUser.scope.department_ids.length > 0) {
+      return departments.filter((d) => currentUser.scope!.department_ids!.includes(d.id));
+    }
+    if (plantId) {
+      return departments.filter((d) => !d.plant_id || d.plant_id === plantId);
+    }
+    if (currentUser.plant_id) {
+      return departments.filter((d) => !d.plant_id || d.plant_id === currentUser.plant_id);
+    }
+    return departments;
+  }, [departments, currentUser, plantId]);
+
+  // Check if department is locked for current user (Facility Admin & Floor Users locked to their assigned dept)
+  const isDeptLockedForUser = useMemo(() => {
+    if (!currentUser) return false;
+    // IT Admin has cross-department access
+    if (currentUser.role === 'it_admin') return false;
+    // Facility Admins and Users are locked to their assigned department
+    return Boolean(
+      currentUser.department_id ||
+      (currentUser.scope?.department_ids && currentUser.scope.department_ids.length <= 1) ||
+      availableDepartments.length <= 1
+    );
+  }, [currentUser, availableDepartments]);
+
   const [newEmpStatus, setNewEmpStatus] = useState<'active' | 'inactive'>('active');
   const [savingEmployee, setSavingEmployee] = useState(false);
   const [empModalError, setEmpModalError] = useState<string | null>(null);
@@ -933,15 +970,32 @@ function AssetWizardContent() {
     if (deptAutoSyncKeyRef.current === syncKey) return;
     deptAutoSyncKeyRef.current = syncKey;
 
-    // Non-IT Admins are forced to their assigned facility & department
+    // Non-IT Admins initial sync:
     if (currentUser && currentUser.role !== 'it_admin') {
-      if (currentUser.location_id) {
-        setLocationId(currentUser.location_id);
-        setNewEmpLocationId(currentUser.location_id);
-      }
-      if (currentUser.plant_id) {
-        setPlantId(currentUser.plant_id);
-        setNewEmpPlantId(currentUser.plant_id);
+      const userAllowedPlts = currentUser.scope?.plant_ids && currentUser.scope.plant_ids.length > 0
+        ? plants.filter((p) => currentUser.scope!.plant_ids!.includes(p.id))
+        : currentUser.plant_id
+        ? plants.filter((p) => p.id === currentUser.plant_id)
+        : plants;
+
+      // Only default if plantId is empty or not in allowed list
+      if (!plantId || (userAllowedPlts.length > 0 && !userAllowedPlts.some((p) => p.id === plantId))) {
+        const defaultPltId = userAllowedPlts[0]?.id || currentUser.plant_id;
+        if (defaultPltId) {
+          setPlantId(defaultPltId);
+          setNewEmpPlantId(defaultPltId);
+          const foundPlt = plants.find((p) => p.id === defaultPltId);
+          if (foundPlt?.location_id) {
+            setLocationId(foundPlt.location_id);
+            setNewEmpLocationId(foundPlt.location_id);
+          }
+        }
+      } else if (plantId) {
+        const foundPlt = plants.find((p) => p.id === plantId);
+        if (foundPlt?.location_id) {
+          setLocationId(foundPlt.location_id);
+          setNewEmpLocationId(foundPlt.location_id);
+        }
       }
       if (currentUser.department_id && departments.length > 0) {
         const matched = departments.find((d) => d.id === currentUser.department_id);
@@ -1144,13 +1198,13 @@ function AssetWizardContent() {
 
   // Cascading Plant updates when Location changes in Employee modal
   useEffect(() => {
-    if (newEmpLocationId && plants.length > 0) {
-      const validPlants = plants.filter((p) => p.location_id === newEmpLocationId);
+    if (newEmpLocationId && allowedPlants.length > 0) {
+      const validPlants = allowedPlants.filter((p) => p.location_id === newEmpLocationId);
       if (validPlants.length > 0 && !validPlants.some((p) => p.id === newEmpPlantId)) {
         setNewEmpPlantId(validPlants[0].id);
       }
     }
-  }, [newEmpLocationId, plants, newEmpPlantId]);
+  }, [newEmpLocationId, allowedPlants, newEmpPlantId]);
 
   // Immediate fast session/user resolve
   useEffect(() => {
@@ -4172,49 +4226,67 @@ function AssetWizardContent() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Location *</label>
-                {currentUser?.role !== 'it_admin' ? (
+                {allowedLocations.length > 1 && currentUser?.role === 'it_admin' ? (
+                  <select
+                    value={locationId}
+                    onChange={(e) => {
+                      const nextLocId = e.target.value;
+                      setLocationId(nextLocId);
+                      setNewEmpLocationId(nextLocId);
+                      const matchingPlants = allowedPlants.filter((p) => p.location_id === nextLocId);
+                      if (matchingPlants.length > 0 && !matchingPlants.some((p) => p.id === plantId)) {
+                        setPlantId(matchingPlants[0].id);
+                        setNewEmpPlantId(matchingPlants[0].id);
+                      }
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white cursor-pointer font-semibold"
+                  >
+                    {allowedLocations.map((loc) => (
+                      <option key={loc.id} value={loc.id}>
+                        {loc.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
                   <div className="w-full bg-blue-50/60 border border-blue-200/80 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 flex items-center justify-between shadow-2xs">
                     <span>{locations.find((loc) => loc.id === locationId)?.name || 'Assigned Location'}</span>
                     <span className="text-[10px] text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded-md border border-blue-200">
                       Assigned
                     </span>
                   </div>
-                ) : (
-                  <select
-                    value={locationId}
-                    onChange={(e) => setLocationId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white cursor-pointer"
-                  >
-                    {locations.map((loc) => (
-                      <option key={loc.id} value={loc.id}>
-                        {loc.name}
-                      </option>
-                    ))}
-                  </select>
                 )}
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Plant / Unit *</label>
-                {currentUser?.role !== 'it_admin' ? (
+                {allowedPlants.length > 1 ? (
+                  <select
+                    value={plantId}
+                    onChange={(e) => {
+                      const nextPltId = e.target.value;
+                      setPlantId(nextPltId);
+                      setNewEmpPlantId(nextPltId);
+                      const selPlt = plants.find((p) => p.id === nextPltId);
+                      if (selPlt?.location_id) {
+                        setLocationId(selPlt.location_id);
+                        setNewEmpLocationId(selPlt.location_id);
+                      }
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white cursor-pointer font-semibold"
+                  >
+                    {allowedPlants.map((plant) => (
+                      <option key={plant.id} value={plant.id}>
+                        {plant.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
                   <div className="w-full bg-blue-50/60 border border-blue-200/80 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 flex items-center justify-between shadow-2xs">
                     <span>{plants.find((plant) => plant.id === plantId)?.name || 'Assigned Plant'}</span>
                     <span className="text-[10px] text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded-md border border-blue-200">
                       Assigned
                     </span>
                   </div>
-                ) : (
-                  <select
-                    value={plantId}
-                    onChange={(e) => setPlantId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white cursor-pointer"
-                  >
-                    {plants.filter((p) => !locationId || p.location_id === locationId).map((plant) => (
-                      <option key={plant.id} value={plant.id}>
-                        {plant.name}
-                      </option>
-                    ))}
-                  </select>
                 )}
               </div>
 
@@ -4383,11 +4455,13 @@ function AssetWizardContent() {
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 cursor-pointer"
                   >
                     <option value="">Select Department...</option>
-                    {departments.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
-                      </option>
-                    ))}
+                    {departments
+                      .filter((d) => !newEmpPlantId || !d.plant_id || d.plant_id === newEmpPlantId)
+                      .map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
                   </select>
                 </div>
 
@@ -4398,10 +4472,17 @@ function AssetWizardContent() {
                   </label>
                   <select
                     value={newEmpLocationId}
-                    onChange={(e) => setNewEmpLocationId(e.target.value)}
+                    onChange={(e) => {
+                      const nextLocId = e.target.value;
+                      setNewEmpLocationId(nextLocId);
+                      const matchingPlants = allowedPlants.filter((p) => p.location_id === nextLocId);
+                      if (matchingPlants.length > 0 && !matchingPlants.some((p) => p.id === newEmpPlantId)) {
+                        setNewEmpPlantId(matchingPlants[0].id);
+                      }
+                    }}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 cursor-pointer"
                   >
-                    {locations.map((loc) => (
+                    {allowedLocations.map((loc) => (
                       <option key={loc.id} value={loc.id}>
                         {loc.name}
                       </option>
@@ -4416,10 +4497,17 @@ function AssetWizardContent() {
                   </label>
                   <select
                     value={newEmpPlantId}
-                    onChange={(e) => setNewEmpPlantId(e.target.value)}
+                    onChange={(e) => {
+                      const nextPltId = e.target.value;
+                      setNewEmpPlantId(nextPltId);
+                      const selPlt = plants.find((p) => p.id === nextPltId);
+                      if (selPlt?.location_id) {
+                        setNewEmpLocationId(selPlt.location_id);
+                      }
+                    }}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 cursor-pointer"
                   >
-                    {plants.filter((p) => !newEmpLocationId || p.location_id === newEmpLocationId).map((p) => (
+                    {allowedPlants.filter((p) => !newEmpLocationId || p.location_id === newEmpLocationId).map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
                       </option>

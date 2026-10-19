@@ -20,13 +20,6 @@ export async function GET(req: NextRequest) {
 
     const currentUser = validation.user;
     if (currentUser.role !== 'it_admin') {
-      // Scope locations
-      if (currentUser.location_id) {
-        locations = locations.filter((l) => l.id === currentUser.location_id);
-      } else if (validation.scope?.location_ids && validation.scope.location_ids.length > 0) {
-        locations = locations.filter((l) => validation.scope!.location_ids!.includes(l.id));
-      }
-
       // Scope plants
       if (validation.scope?.plant_ids && validation.scope.plant_ids.length > 0) {
         plants = plants.filter((p) => validation.scope!.plant_ids!.includes(p.id));
@@ -36,13 +29,26 @@ export async function GET(req: NextRequest) {
         plants = plants.filter((p) => p.location_id === currentUser.location_id);
       }
 
-      // Scope departments
-      if (currentUser.department_id) {
-        departments = departments.filter((d) => d.id === currentUser.department_id);
-      } else if (validation.scope?.department_ids && validation.scope.department_ids.length > 0) {
+      // Scope locations: prioritize explicit location_ids, or derive from scoped plants
+      if (validation.scope?.location_ids && validation.scope.location_ids.length > 0) {
+        locations = locations.filter((l) => validation.scope!.location_ids!.includes(l.id));
+      } else if (validation.scope?.plant_ids && validation.scope.plant_ids.length > 0) {
+        const scopedLocIds = new Set(plants.map((p) => p.location_id).filter(Boolean));
+        if (currentUser.location_id) scopedLocIds.add(currentUser.location_id);
+        locations = locations.filter((l) => scopedLocIds.has(l.id));
+      } else if (currentUser.location_id) {
+        locations = locations.filter((l) => l.id === currentUser.location_id);
+      }
+
+      // Scope departments: prioritize explicit department_ids, or match scoped plants
+      if (validation.scope?.department_ids && validation.scope.department_ids.length > 0) {
         departments = departments.filter((d) => validation.scope!.department_ids!.includes(d.id));
+      } else if (validation.scope?.plant_ids && validation.scope.plant_ids.length > 0) {
+        departments = departments.filter((d) => !d.plant_id || validation.scope!.plant_ids!.includes(d.plant_id));
       } else if (currentUser.plant_id) {
         departments = departments.filter((d) => !d.plant_id || d.plant_id === currentUser.plant_id);
+      } else if (currentUser.department_id && currentUser.role === 'user') {
+        departments = departments.filter((d) => d.id === currentUser.department_id);
       }
     }
 

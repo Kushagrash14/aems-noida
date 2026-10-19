@@ -47,25 +47,33 @@ export function isEntityInUserScope(
   const deptId = entity.current_department_id || entity.department_id;
   const catId = entity.category_id;
 
+  // Check Plant scope: array in scope (multi-plant) takes precedence over single plant_id
+  const hasScopedPlants = Boolean(scope?.plant_ids && scope.plant_ids.length > 0);
+  if (hasScopedPlants) {
+    if (pltId && !scope!.plant_ids!.includes(pltId)) return false;
+  } else if (user.plant_id && pltId && user.plant_id !== pltId) {
+    return false;
+  }
+
   // Check Location scope: array in scope takes precedence over single location_id
   if (scope?.location_ids && scope.location_ids.length > 0) {
     if (locId && !scope.location_ids.includes(locId)) return false;
   } else if (user.location_id && locId && user.location_id !== locId) {
-    return false;
-  }
-
-  // Check Plant scope: array in scope (multi-plant) takes precedence over single plant_id
-  if (scope?.plant_ids && scope.plant_ids.length > 0) {
-    if (pltId && !scope.plant_ids.includes(pltId)) return false;
-  } else if (user.plant_id && pltId && user.plant_id !== pltId) {
-    return false;
+    // If the entity belongs to an authorized plant in user's multi-plant scope, allow it even if location differs
+    const plantAuthorized = hasScopedPlants && pltId && scope!.plant_ids!.includes(pltId);
+    if (!plantAuthorized) {
+      return false;
+    }
   }
 
   // Check Department scope: array in scope takes precedence over single department_id
   if (scope?.department_ids && scope.department_ids.length > 0) {
     if (deptId && !scope.department_ids.includes(deptId)) return false;
   } else if (user.department_id && deptId && user.department_id !== deptId) {
-    return false;
+    // Facility Admin with multi-plant permissions manages equipment across departments in their assigned plants
+    if (!hasScopedPlants && user.role !== 'admin') {
+      return false;
+    }
   }
 
   // Check Category scope if assigned
