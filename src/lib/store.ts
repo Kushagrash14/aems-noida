@@ -3690,6 +3690,7 @@ export async function getUsersWithScopes(): Promise<Array<User & { scope?: UserS
       scope: scope
         ? {
             ...scope,
+            can_manage_employees: Boolean(scope.can_manage_employees),
             location_ids: parsedLocIds,
             plant_ids: parsedPltIds,
             department_ids: parsedDeptIds || (resolvedDeptId ? [resolvedDeptId] : null),
@@ -3704,6 +3705,7 @@ export async function updateUserScope(
   userId: string,
   scopeData: {
     can_edit: boolean;
+    can_manage_employees?: boolean;
     category_ids: string[] | null;
     location_ids: string[] | null;
     plant_ids: string[] | null;
@@ -3726,7 +3728,7 @@ export async function updateUserScope(
 
   if (env.isMockMode) return;
 
-  const dbScopePayload = {
+  const dbScopePayload: Record<string, any> = {
     user_id: userId,
     can_edit: Boolean(scopeData.can_edit),
     category_ids: scopeData.category_ids || null,
@@ -3736,6 +3738,10 @@ export async function updateUserScope(
     sub_department: scopeData.sub_department || null,
     updated_at: new Date().toISOString(),
   };
+
+  if (scopeData.can_manage_employees !== undefined) {
+    dbScopePayload.can_manage_employees = Boolean(scopeData.can_manage_employees);
+  }
 
   const { error: scopeError } = await db
     .from('user_scopes')
@@ -3765,6 +3771,7 @@ export async function createUser(
   },
   scopeData: {
     can_edit: boolean;
+    can_manage_employees?: boolean;
     location_ids?: string[] | null;
     plant_ids?: string[] | null;
     category_ids?: string[] | null;
@@ -3795,6 +3802,7 @@ export async function createUser(
     id: crypto.randomUUID(),
     user_id: userId,
     can_edit: scopeData.can_edit,
+    can_manage_employees: Boolean(scopeData.can_manage_employees),
     category_ids: scopeData.category_ids || null,
     location_ids: scopeData.location_ids || null,
     plant_ids: scopeData.plant_ids || null,
@@ -3835,10 +3843,11 @@ export async function createUser(
 
   if (userError) throw new Error(userError.message);
 
-  const dbScopePayload = {
+  const dbScopePayload: Record<string, any> = {
     id: newScope.id,
     user_id: userId,
     can_edit: newScope.can_edit,
+    can_manage_employees: Boolean(scopeData.can_manage_employees),
     category_ids: newScope.category_ids || null,
     location_ids: newScope.location_ids,
     plant_ids: newScope.plant_ids,

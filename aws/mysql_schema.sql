@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS user_scopes (
   id              CHAR(36)     NOT NULL DEFAULT (UUID()),
   user_id         CHAR(36)     NOT NULL,
   can_edit        TINYINT(1)   NOT NULL DEFAULT 1,
+  can_manage_employees TINYINT(1) NOT NULL DEFAULT 0,
   category_ids    JSON         NULL,
   location_ids    JSON         NULL,
   plant_ids       JSON         NULL,
@@ -524,8 +525,8 @@ INSERT IGNORE INTO plants (id, location_id, name, code) VALUES
 INSERT IGNORE INTO users (id, email, full_name, phone, role, is_active) VALUES
   ('00000000-0000-0000-0000-000000000001', 'software.2040@pgel.in', 'Software Team (IT Admin)', NULL, 'it_admin', 1);
 
-INSERT IGNORE INTO user_scopes (user_id, can_edit, category_ids, location_ids, plant_ids) VALUES
-  ('00000000-0000-0000-0000-000000000001', 1, NULL, NULL, NULL);
+INSERT IGNORE INTO user_scopes (user_id, can_edit, can_manage_employees, category_ids, location_ids, plant_ids) VALUES
+  ('00000000-0000-0000-0000-000000000001', 1, 1, NULL, NULL, NULL);
 
 INSERT IGNORE INTO departments (id, name, code, admin_user_id) VALUES
   ('33333333-3333-3333-3333-333333333301', 'Information Technology', 'DEPT-IT', '00000000-0000-0000-0000-000000000001'),

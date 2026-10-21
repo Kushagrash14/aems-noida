@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Employee, Department, Asset, Location, Plant, User, UserScope } from '@/types/database';
+import { canUserManageEmployees } from '@/lib/permissions';
 import {
   Users,
   Search,
@@ -42,6 +43,11 @@ function StaffDirectoryContent() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userScope, setUserScope] = useState<UserScope | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const canManageEmployees = useMemo(() => {
+    if (!currentUser) return false;
+    return canUserManageEmployees(currentUser, userScope);
+  }, [currentUser, userScope]);
 
   // Entities
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -146,6 +152,12 @@ function StaffDirectoryContent() {
     setSubmittingEmp(true);
     setEmpModalError(null);
 
+    if (!canManageEmployees) {
+      setEmpModalError('Permission denied: You do not have permission to manage employee profiles. Contact your IT administrator.');
+      setSubmittingEmp(false);
+      return;
+    }
+
     if (!modalLocationId || !modalPlantId || !modalDeptId) {
       setEmpModalError('Please select Location, Plant Unit, and Department.');
       setSubmittingEmp(false);
@@ -206,6 +218,10 @@ function StaffDirectoryContent() {
 
   const handleToggleStatus = async (emp: Employee, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (!canManageEmployees) {
+      setNotification({ type: 'error', message: 'Permission denied: You do not have permission to manage employee status.' });
+      return;
+    }
     const newStatus = emp.status === 'inactive' ? 'active' : 'inactive';
     try {
       const res = await fetch('/api/employees', {
@@ -484,15 +500,17 @@ function StaffDirectoryContent() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={openAddModal}
-            className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-all cursor-pointer shadow-xs flex items-center gap-1.5 text-xs font-bold"
-            title="Add New Employee"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>+ Add Employee</span>
-          </button>
+          {canManageEmployees && (
+            <button
+              type="button"
+              onClick={openAddModal}
+              className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-all cursor-pointer shadow-xs flex items-center gap-1.5 text-xs font-bold"
+              title="Add New Employee"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>+ Add Employee</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -727,29 +745,32 @@ function StaffDirectoryContent() {
                             {emp.status?.toUpperCase() || 'ACTIVE'}
                           </span>
 
-                          {/* Quick Toggle Status */}
-                          <button
-                            type="button"
-                            onClick={(e) => handleToggleStatus(emp, e)}
-                            title={isInactive ? 'Activate Employee' : 'Mark as Inactive'}
-                            className={`p-1 rounded-lg border transition-all cursor-pointer ${
-                              isInactive
-                                ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
-                                : 'bg-slate-50 hover:bg-amber-100 text-slate-500 hover:text-amber-700 border-slate-200'
-                            }`}
-                          >
-                            {isInactive ? <UserCheck className="w-3.5 h-3.5" /> : <UserMinus className="w-3.5 h-3.5" />}
-                          </button>
+                          {/* Quick Toggle Status & Edit (Authorized only) */}
+                          {canManageEmployees && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={(e) => handleToggleStatus(emp, e)}
+                                title={isInactive ? 'Activate Employee' : 'Mark as Inactive'}
+                                className={`p-1 rounded-lg border transition-all cursor-pointer ${
+                                  isInactive
+                                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                                    : 'bg-slate-50 hover:bg-amber-100 text-slate-500 hover:text-amber-700 border-slate-200'
+                                }`}
+                              >
+                                {isInactive ? <UserCheck className="w-3.5 h-3.5" /> : <UserMinus className="w-3.5 h-3.5" />}
+                              </button>
 
-                          {/* Quick Edit */}
-                          <button
-                            type="button"
-                            onClick={(e) => openEditModal(emp, e)}
-                            title="Edit Employee Profile"
-                            className="p-1 rounded-lg bg-slate-50 hover:bg-blue-100 text-slate-400 hover:text-blue-700 border border-slate-200 transition-all cursor-pointer"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
+                              <button
+                                type="button"
+                                onClick={(e) => openEditModal(emp, e)}
+                                title="Edit Employee Profile"
+                                className="p-1 rounded-lg bg-slate-50 hover:bg-blue-100 text-slate-400 hover:text-blue-700 border border-slate-200 transition-all cursor-pointer"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
 
                           {/* Quick Delete (Admin / IT Admin Only) */}
                           {(currentUser?.role === 'it_admin' || currentUser?.role === 'admin') && (
@@ -931,36 +952,40 @@ function StaffDirectoryContent() {
             {/* Modal Footer with Inactivate & Delete Actions */}
             <div className="p-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2 bg-slate-50 shrink-0">
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleToggleStatus(selectedProfileModal)}
-                  className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
-                    selectedProfileModal.status === 'inactive'
-                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
-                      : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
-                  }`}
-                >
-                  {selectedProfileModal.status === 'inactive' ? (
-                    <>
-                      <UserCheck className="w-3.5 h-3.5" />
-                      <span>Activate Employee</span>
-                    </>
-                  ) : (
-                    <>
-                      <UserMinus className="w-3.5 h-3.5" />
-                      <span>Mark Inactive</span>
-                    </>
-                  )}
-                </button>
+                {canManageEmployees && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleStatus(selectedProfileModal)}
+                      className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                        selectedProfileModal.status === 'inactive'
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                          : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
+                      }`}
+                    >
+                      {selectedProfileModal.status === 'inactive' ? (
+                        <>
+                          <UserCheck className="w-3.5 h-3.5" />
+                          <span>Activate Employee</span>
+                        </>
+                      ) : (
+                        <>
+                          <UserMinus className="w-3.5 h-3.5" />
+                          <span>Mark Inactive</span>
+                        </>
+                      )}
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={() => openEditModal(selectedProfileModal)}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <Edit3 className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Edit Profile</span>
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(selectedProfileModal)}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Edit Profile</span>
+                    </button>
+                  </>
+                )}
 
                 {(currentUser?.role === 'it_admin' || currentUser?.role === 'admin') && (
                   <button

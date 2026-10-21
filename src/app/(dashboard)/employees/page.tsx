@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Employee, Department, Asset, Location, Plant, User } from '@/types/database';
+import { canUserManageEmployees } from '@/lib/permissions';
 import {
   Users,
   Plus,
@@ -43,8 +44,13 @@ function EmployeesPageContent() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [plants, setPlants] = useState<Plant[]>([]);
-  const [, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [, setLoading] = useState(true);
+
+  const canManageEmployees = useMemo(() => {
+    if (!currentUser) return false;
+    return canUserManageEmployees(currentUser, currentUser.scope);
+  }, [currentUser]);
 
   // Selected Employee for Profile View
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
@@ -106,7 +112,7 @@ function EmployeesPageContent() {
       if (deptRes?.departments) setDepartments(deptRes.departments);
       if (locRes?.locations) setLocations(locRes.locations);
       if (plantRes?.plants) setPlants(plantRes.plants);
-      if (meRes?.user) setCurrentUser(meRes.user);
+      if (meRes?.user) setCurrentUser(meRes.scope ? { ...meRes.user, scope: meRes.scope } : meRes.user);
     } catch (err) {
       console.error('Error fetching HR directory data:', err);
     } finally {
@@ -171,6 +177,12 @@ function EmployeesPageContent() {
     setSubmitting(true);
     setError(null);
 
+    if (!canManageEmployees) {
+      setError('Permission denied: You do not have permission to add or modify employee profiles. Contact your IT administrator.');
+      setSubmitting(false);
+      return;
+    }
+
     if (!locationId || !plantId || !departmentId) {
       setError('Please select Location, Plant Unit, and Department. Every employee must be assigned to a specific Location & Plant.');
       setSubmitting(false);
@@ -226,12 +238,21 @@ function EmployeesPageContent() {
 
   // Trigger Delete Confirmation Modal
   const handleDeleteEmployee = (emp: Employee) => {
+    if (!canManageEmployees) {
+      setError('Permission denied: You do not have permission to delete employee profiles.');
+      return;
+    }
     setDeletingEmpTarget(emp);
   };
 
   // Confirm Delete Employee
   const confirmDeleteEmployee = async () => {
     if (!deletingEmpTarget) return;
+    if (!canManageEmployees) {
+      setError('Permission denied: You do not have permission to delete employee profiles.');
+      setDeletingEmpTarget(null);
+      return;
+    }
     setIsDeletingEmp(true);
     try {
       const res = await fetch(`/api/employees?id=${deletingEmpTarget.id}`, { method: 'DELETE' });
@@ -432,24 +453,26 @@ function EmployeesPageContent() {
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => openEditModal(selectedEmployee)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all cursor-pointer shadow-2xs"
-              >
-                <Edit3 className="w-3.5 h-3.5 text-slate-500" />
-                <span>Edit</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDeleteEmployee(selectedEmployee)}
-                className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all cursor-pointer shadow-2xs"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete</span>
-              </button>
-            </div>
+            {canManageEmployees && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => openEditModal(selectedEmployee)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Edit</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteEmployee(selectedEmployee)}
+                  className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Hero Employee Identity Card */}
@@ -934,17 +957,19 @@ function EmployeesPageContent() {
                       >
                         {emp.status === 'inactive' ? 'INACTIVE' : 'ACTIVE'}
                       </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditModal(emp);
-                        }}
-                        className="p-1 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-                        title="Options"
-                      >
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
+                      {canManageEmployees && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditModal(emp);
+                          }}
+                          className="p-1 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                          title="Options"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );

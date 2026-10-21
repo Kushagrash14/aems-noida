@@ -255,6 +255,11 @@ function NavbarContent({ user, scope }: NavbarProps) {
   };
 
   const isItAdmin = activeUser?.role === 'it_admin';
+  const canManageEmployees =
+    isItAdmin ||
+    activeUser?.role === 'admin' ||
+    activeUser?.role === 'hr' ||
+    Boolean(activeScope?.can_manage_employees || activeUser?.scope?.can_manage_employees);
 
   // Allowed plants based on user privileges and assigned multi-plant scopes
   const userAllowedPlants = useMemo(() => {
@@ -442,14 +447,16 @@ function NavbarContent({ user, scope }: NavbarProps) {
 
         {/* "+ Add Employee" Button for HR View */}
         {isHRView ? (
-          <button
-            type="button"
-            onClick={handleOpenAddEmployee}
-            className="flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-bold rounded-full shadow-xs transition-all whitespace-nowrap cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Employee</span>
-          </button>
+          canManageEmployees ? (
+            <button
+              type="button"
+              onClick={handleOpenAddEmployee}
+              className="flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-bold rounded-full shadow-xs transition-all whitespace-nowrap cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Employee</span>
+            </button>
+          ) : null
         ) : (
           /* "+ New Entry" Dropdown Menu for Asset View */
           <div className="relative" ref={entryMenuRef}>

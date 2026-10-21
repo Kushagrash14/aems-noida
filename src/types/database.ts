@@ -61,6 +61,7 @@ export interface UserScope {
   id: string;
   user_id: string;
   can_edit: boolean;
+  can_manage_employees?: boolean;
   category_ids: string[] | null; // null = all in scope
   location_ids: string[] | null; // null = all in scope
   plant_ids: string[] | null;    // null = all in scope

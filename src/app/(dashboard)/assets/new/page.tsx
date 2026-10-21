@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Category, CategoryFormField, FieldType, Location, Plant, Department, Employee, User } from '@/types/database';
+import { canUserManageEmployees } from '@/lib/permissions';
 import SearchableCombobox from '@/components/ui/SearchableCombobox';
 import { getAssetPreviewImage } from '@/lib/assetVisuals';
 import { uploadDataUrl } from '@/lib/uploadClient';
@@ -34,6 +35,7 @@ import {
   MapPin,
   Server,
   Mail,
+  Lock,
 } from 'lucide-react';
 
 const SEED_LOCATIONS: Location[] = [
@@ -372,6 +374,12 @@ function AssetWizardContent() {
   // Authorization for Smart Excel Batch Import (STRICTLY IT Admin only)
   const isAuthorizedForImport = useMemo(() => {
     return currentUser?.role === 'it_admin';
+  }, [currentUser]);
+
+  // Authorization to create / register new employee profile
+  const canCreateEmployee = useMemo(() => {
+    if (!currentUser) return false;
+    return canUserManageEmployees(currentUser, currentUser.scope);
   }, [currentUser]);
 
 
@@ -1911,6 +1919,11 @@ function AssetWizardContent() {
   const handleCreateEmployeeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setEmpModalError(null);
+
+    if (!canCreateEmployee) {
+      setEmpModalError('Permission denied: You do not have permission to create employee profiles. Please contact your IT administrator.');
+      return;
+    }
 
     const cleanCode = newEmpCode.trim().toUpperCase() || `EMP-${Date.now().toString().slice(-6)}`;
     if (!newEmpName.trim()) {
@@ -4087,31 +4100,40 @@ function AssetWizardContent() {
                   <div className="flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
                     <div>
-                      <span className="font-bold">No employee profile found for code "{empCodeQuery.trim().toUpperCase()}".</span>
+                      <span className="font-bold">No employee profile found for code &quot;{empCodeQuery.trim().toUpperCase()}&quot;.</span>
                       <p className="text-[11px] text-amber-700 mt-0.5">
-                        This employee code is not registered in the system. You can create a new profile for this employee code below:
+                        {canCreateEmployee
+                          ? 'This employee code is not registered in the system. You can create a new profile for this employee code below:'
+                          : 'This employee code is not registered in the system. Employee creation permission is required to register new profiles.'}
                       </p>
                     </div>
                   </div>
 
-                  {/* UNHIDE the Add Employee button ONLY when employee does not exist in DB */}
-                  <div className="pt-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNewEmpCode(empCodeQuery.trim().toUpperCase());
-                        if (departmentId) setNewEmpDeptId(departmentId);
-                        if (locationId) setNewEmpLocationId(locationId);
-                        if (plantId) setNewEmpPlantId(plantId);
-                        setEmpModalError(null);
-                        setShowEmployeeModal(true);
-                      }}
-                      className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-2xs transition-all cursor-pointer"
-                    >
-                      <UserPlus className="w-3.5 h-3.5" />
-                      <span>+ Register New Profile for "{empCodeQuery.trim().toUpperCase()}"</span>
-                    </button>
-                  </div>
+                  {/* UNHIDE the Add Employee button ONLY when user is authorized and employee does not exist in DB */}
+                  {canCreateEmployee ? (
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewEmpCode(empCodeQuery.trim().toUpperCase());
+                          if (departmentId) setNewEmpDeptId(departmentId);
+                          if (locationId) setNewEmpLocationId(locationId);
+                          if (plantId) setNewEmpPlantId(plantId);
+                          setEmpModalError(null);
+                          setShowEmployeeModal(true);
+                        }}
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-2xs transition-all cursor-pointer"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        <span>+ Register New Profile for &quot;{empCodeQuery.trim().toUpperCase()}&quot;</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="pt-1 flex items-center gap-2 text-[11px] text-amber-800 bg-amber-100/70 p-2.5 rounded-xl border border-amber-200">
+                      <Lock className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                      <span>Employee creation restricted. Contact your IT administrator to grant employee creation access.</span>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-[11px] text-slate-500 bg-slate-100/70 border border-slate-200 p-3 rounded-xl flex items-center gap-2">

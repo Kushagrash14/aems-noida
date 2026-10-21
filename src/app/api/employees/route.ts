@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEmployees, createEmployee, updateEmployee, deleteEmployee, getDepartments } from '@/lib/store';
 import { validateSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth/session';
-import { canUserEdit } from '@/lib/permissions';
+import { canUserEdit, canUserManageEmployees, isEntityInUserScope } from '@/lib/permissions';
 import { logAuditEvent } from '@/lib/audit';
 
 export async function GET(req: NextRequest) {
@@ -37,8 +37,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (validation.user.role === 'user') {
-    return NextResponse.json({ error: 'Permission denied: HR or Admin access required' }, { status: 403 });
+  if (!canUserManageEmployees(validation.user, validation.scope)) {
+    return NextResponse.json({ error: 'Permission denied: Employee management access is not enabled for your account' }, { status: 403 });
   }
 
   if (!canUserEdit(validation.user, validation.scope)) {
@@ -54,6 +54,14 @@ export async function POST(req: NextRequest) {
 
     if (!full_name || !department_id || !plant_id || !location_id) {
       return NextResponse.json({ error: 'Missing mandatory employee fields (Name, Department, Plant, Location)' }, { status: 400 });
+    }
+
+    if (!isEntityInUserScope(validation.user, validation.scope, {
+      location_id,
+      plant_id,
+      department_id,
+    })) {
+      return NextResponse.json({ error: 'Employee plant or location is outside your assigned administrative scope' }, { status: 403 });
     }
 
     // Validate department exists in master records
@@ -103,8 +111,8 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (validation.user.role === 'user') {
-    return NextResponse.json({ error: 'Permission denied: HR or Admin access required' }, { status: 403 });
+  if (!canUserManageEmployees(validation.user, validation.scope)) {
+    return NextResponse.json({ error: 'Permission denied: Employee management access is not enabled for your account' }, { status: 403 });
   }
 
   if (!canUserEdit(validation.user, validation.scope)) {
@@ -171,8 +179,8 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (validation.user.role === 'user') {
-    return NextResponse.json({ error: 'Permission denied: HR or Admin access required' }, { status: 403 });
+  if (!canUserManageEmployees(validation.user, validation.scope)) {
+    return NextResponse.json({ error: 'Permission denied: Employee management access is not enabled for your account' }, { status: 403 });
   }
 
   if (!canUserEdit(validation.user, validation.scope)) {

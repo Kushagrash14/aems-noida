@@ -22,6 +22,17 @@ export function canUserEdit(user: User, scope?: UserScope | null): boolean {
 }
 
 /**
+ * Check if the user is authorized to create or manage employee profiles
+ * - IT Admin, Admin, and HR roles always have employee management access
+ * - Standard User can only create/manage employees if scope.can_manage_employees is enabled
+ */
+export function canUserManageEmployees(user: User, scope?: UserScope | null): boolean {
+  if (user.role === 'it_admin' || user.role === 'admin' || user.role === 'hr') return true;
+  if (!user.is_active) return false;
+  return Boolean(scope?.can_manage_employees);
+}
+
+/**
  * Check if an asset or record falls within a user's assigned scope
  * - IT Admin: Global enterprise visibility (all locations, plants, departments)
  * - Admin & User: Strictly confined to their assigned Location, Plant, and Department
