@@ -94,6 +94,13 @@ export default async function DashboardOverviewPage() {
 
     if (scope?.department_ids && scope.department_ids.length > 0) {
       scopedDepartments = departments.filter((d) => scope.department_ids!.includes(d.id));
+    } else if (user.role === 'admin') {
+      if (scopedPlants.length > 0) {
+        const pIds = scopedPlants.map((p) => p.id);
+        scopedDepartments = departments.filter((d) => !d.plant_id || pIds.includes(d.plant_id));
+      } else {
+        scopedDepartments = departments;
+      }
     } else if (userDeptId) {
       scopedDepartments = departments.filter((d) => d.id === userDeptId);
     }

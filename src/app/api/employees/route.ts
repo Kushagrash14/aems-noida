@@ -20,12 +20,27 @@ export async function GET(req: NextRequest) {
 
   // Enforce facility & department scoping for non-IT Admin
   if (validation.user.role !== 'it_admin') {
-    if (validation.user.location_id) locationId = validation.user.location_id;
-    if (validation.user.plant_id) plantId = validation.user.plant_id;
-    if (validation.user.department_id) deptId = validation.user.department_id;
+    if (validation.user.location_id && !locationId) locationId = validation.user.location_id;
+    if (validation.user.plant_id && !plantId) plantId = validation.user.plant_id;
+    // Standard user is locked to their single department; Admin is filtered via isEntityInUserScope
+    if (validation.user.role === 'user' && validation.user.department_id && !deptId) {
+      deptId = validation.user.department_id;
+    }
   }
 
-  const employees = await getEmployees({ locationId, plantId, deptId, search });
+  let employees = await getEmployees({ locationId, plantId, deptId, search });
+
+  // Post-filter with isEntityInUserScope to strictly respect multi-plant and multi-department scopes
+  if (validation.user.role !== 'it_admin') {
+    employees = employees.filter((e) =>
+      isEntityInUserScope(validation.user!, validation.scope || null, {
+        location_id: e.location_id,
+        plant_id: e.plant_id,
+        department_id: e.department_id,
+      })
+    );
+  }
+
   return NextResponse.json({ employees });
 }
 

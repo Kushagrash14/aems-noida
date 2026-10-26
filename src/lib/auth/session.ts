@@ -134,13 +134,21 @@ export interface SessionValidationResult {
 }
 
 function resolveUserOrgUnits(user: User, scope: UserScope | null, adminDeptId: string | null): void {
-  const assignedDeptId = user.department_id || scope?.department_ids?.[0] || scope?.category_ids?.[0] || adminDeptId || null;
+  if (user.role === 'it_admin') return;
+
+  const hasScopedDepts = Boolean(scope?.department_ids && scope.department_ids.length > 0);
+  const assignedDeptId = hasScopedDepts
+    ? scope!.department_ids![0]
+    : user.role === 'admin'
+    ? null
+    : user.department_id || adminDeptId || null;
+
   user.location_id = user.location_id || scope?.location_ids?.[0] || null;
   user.plant_id = user.plant_id || scope?.plant_ids?.[0] || null;
   user.department_id = assignedDeptId;
 
   if (scope) {
-    if (assignedDeptId && (!scope.department_ids || scope.department_ids.length === 0)) {
+    if (user.role === 'user' && assignedDeptId && (!scope.department_ids || scope.department_ids.length === 0)) {
       scope.department_ids = [assignedDeptId];
     }
     scope.category_ids = null;
@@ -207,7 +215,7 @@ export async function validateSessionToken(rawToken?: string): Promise<SessionVa
     const scope = (scopeData as UserScope | null) || null;
 
     let adminDeptId: string | null = null;
-    if (!user.department_id && !scope?.department_ids?.[0] && !scope?.category_ids?.[0]) {
+    if (user.role !== 'it_admin' && user.role !== 'admin' && !user.department_id && !scope?.department_ids?.[0] && !scope?.category_ids?.[0]) {
       const { data: deptData } = await db
         .from('departments')
         .select('id')

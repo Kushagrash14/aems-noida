@@ -23,10 +23,12 @@ export async function GET(req: NextRequest) {
   // Non-IT Admins are strictly scoped to their assigned department(s)
   const currentUser = validation.user;
   if (currentUser.role !== 'it_admin') {
-    if (currentUser.department_id) {
-      departments = departments.filter((d) => d.id === currentUser.department_id);
-    } else if (validation.scope?.department_ids && validation.scope.department_ids.length > 0) {
+    if (validation.scope?.department_ids && validation.scope.department_ids.length > 0) {
       departments = departments.filter((d) => validation.scope!.department_ids!.includes(d.id));
+    } else if (currentUser.role === 'user' && currentUser.department_id) {
+      departments = departments.filter((d) => d.id === currentUser.department_id);
+    } else if (validation.scope?.plant_ids && validation.scope.plant_ids.length > 0) {
+      departments = departments.filter((d) => !d.plant_id || validation.scope!.plant_ids!.includes(d.plant_id));
     } else if (currentUser.plant_id) {
       departments = departments.filter((d) => !d.plant_id || d.plant_id === currentUser.plant_id);
     }

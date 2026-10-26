@@ -934,11 +934,28 @@ function AssetWizardContent() {
       }
       return departments;
     }
+    // If user has explicit department_ids assigned in scope, use them!
+    if (currentUser.scope?.department_ids && currentUser.scope.department_ids.length > 0) {
+      const scoped = departments.filter((d) => currentUser.scope!.department_ids!.includes(d.id));
+      if (plantId) {
+        const byPlant = scoped.filter((d) => !d.plant_id || d.plant_id === plantId);
+        if (byPlant.length > 0) return byPlant;
+      }
+      return scoped;
+    }
+    // If admin has no specific department_ids, they have all departments in their plant!
+    if (currentUser.role === 'admin') {
+      if (plantId) {
+        return departments.filter((d) => !d.plant_id || d.plant_id === plantId);
+      }
+      if (currentUser.plant_id) {
+        return departments.filter((d) => !d.plant_id || d.plant_id === currentUser.plant_id);
+      }
+      return departments;
+    }
+    // Standard floor user is locked to their single department
     if (currentUser.department_id) {
       return departments.filter((d) => d.id === currentUser.department_id);
-    }
-    if (currentUser.scope?.department_ids && currentUser.scope.department_ids.length > 0) {
-      return departments.filter((d) => currentUser.scope!.department_ids!.includes(d.id));
     }
     if (plantId) {
       return departments.filter((d) => !d.plant_id || d.plant_id === plantId);
@@ -949,12 +966,19 @@ function AssetWizardContent() {
     return departments;
   }, [departments, currentUser, plantId]);
 
-  // Check if department is locked for current user (Facility Admin & Floor Users locked to their assigned dept)
+  // Check if department is locked for current user
   const isDeptLockedForUser = useMemo(() => {
     if (!currentUser) return false;
     // IT Admin has cross-department access
     if (currentUser.role === 'it_admin') return false;
-    // Facility Admins and Users are locked to their assigned department
+    // Admin with multiple departments or all departments can select between them
+    if (currentUser.role === 'admin') {
+      if (!currentUser.scope?.department_ids || currentUser.scope.department_ids.length === 0) {
+        return availableDepartments.length <= 1;
+      }
+      return currentUser.scope.department_ids.length <= 1;
+    }
+    // Floor Users locked to their assigned single department
     return Boolean(
       currentUser.department_id ||
       (currentUser.scope?.department_ids && currentUser.scope.department_ids.length <= 1) ||

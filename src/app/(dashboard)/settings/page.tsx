@@ -8,6 +8,7 @@ import { formatDateTime } from '@/lib/utils';
 import {
   Settings,
   Building,
+  Building2,
   MapPin,
   Users,
   CheckCircle2,
@@ -157,6 +158,8 @@ function SettingsContent() {
   const [userPlantId, setUserPlantId] = useState('');
   const [userPlantIds, setUserPlantIds] = useState<string[]>([]);
   const [userDeptId, setUserDeptId] = useState('');
+  const [userDeptIds, setUserDeptIds] = useState<string[]>([]);
+  const [userAllDepts, setUserAllDepts] = useState<boolean>(false);
   const [userSubDept, setUserSubDept] = useState('');
   const [userCanEdit, setUserCanEdit] = useState(true);
   const [userCanManageEmployees, setUserCanManageEmployees] = useState(false);
@@ -217,6 +220,8 @@ function SettingsContent() {
     setUserPlantId(initialPlantIds[0] || (isFacilityAdmin ? (currentUser?.plant_id || '') : ''));
     setUserPlantIds(initialPlantIds);
     setUserDeptId(isFacilityAdmin ? (currentUser?.department_id || '') : '');
+    setUserDeptIds(isFacilityAdmin && currentUser?.department_id ? [currentUser.department_id] : []);
+    setUserAllDepts(false);
     setUserSubDept(isFacilityAdmin ? (currentUser?.sub_department || '') : '');
     setUserCanEdit(true);
     setUserCanManageEmployees(false);
@@ -253,7 +258,13 @@ function SettingsContent() {
     setUserPlantId(u.plant_id || initialPlantIds[0] || '');
     setUserPlantIds(initialPlantIds);
     setUserLocationId(initialPlantIds.length > 1 ? '' : (u.location_id || u.scope?.location_ids?.[0] || ''));
-    setUserDeptId(u.department_id || u.scope?.department_ids?.[0] || '');
+    const initialDeptIds = u.scope?.department_ids && u.scope.department_ids.length > 0
+      ? u.scope.department_ids
+      : (u.department_id ? [u.department_id] : []);
+    setUserDeptId(u.department_id || initialDeptIds[0] || '');
+    setUserDeptIds(initialDeptIds);
+    const isAllDept = u.role === 'admin' && (!u.scope?.department_ids || u.scope.department_ids.length === 0) && !u.department_id;
+    setUserAllDepts(isAllDept);
     setUserSubDept(u.sub_department || u.scope?.sub_department || '');
     setUserCanEdit(u.scope?.can_edit ?? true);
     setUserCanManageEmployees(Boolean(u.scope?.can_manage_employees));
@@ -289,7 +300,34 @@ function SettingsContent() {
           ? Array.from(new Set(effectivePlantIds.map((pid) => plants.find((p) => p.id === pid)?.location_id).filter(Boolean) as string[]))
           : (resolvedLoc ? [resolvedLoc] : null));
     const effectiveLoc = resolvedLoc || (derivedLocIds && derivedLocIds.length > 0 ? derivedLocIds[0] : null);
-    const resolvedDept = isFacilityAdmin ? (currentUser?.department_id || userDeptId || null) : (isItAdmin ? null : (userDeptId || null));
+
+    let effectiveDeptIds: string[] | null = null;
+    let resolvedDept: string | null = null;
+
+    if (!isItAdmin) {
+      if (resolvedRole === 'admin') {
+        if (userAllDepts) {
+          effectiveDeptIds = null;
+          resolvedDept = null;
+        } else if (userDeptIds.length > 0) {
+          effectiveDeptIds = userDeptIds;
+          resolvedDept = userDeptIds[0];
+        } else if (userDeptId) {
+          effectiveDeptIds = [userDeptId];
+          resolvedDept = userDeptId;
+        } else {
+          setUserModalError('Please select at least one Department or check "All Departments" for this Admin.');
+          return;
+        }
+      } else {
+        resolvedDept = isFacilityAdmin ? (currentUser?.department_id || userDeptId || null) : (userDeptId || null);
+        effectiveDeptIds = resolvedDept ? [resolvedDept] : null;
+        if (!resolvedDept && !isFacilityAdmin) {
+          setUserModalError('Please select a Department for this user.');
+          return;
+        }
+      }
+    }
 
     setSavingUser(true);
     setUserModalError(null);
@@ -311,7 +349,7 @@ function SettingsContent() {
           can_manage_employees: isItAdmin || resolvedRole === 'admin' || resolvedRole === 'hr' ? true : userCanManageEmployees,
           location_ids: isItAdmin ? null : (derivedLocIds && derivedLocIds.length > 0 ? derivedLocIds : (effectiveLoc ? [effectiveLoc] : null)),
           plant_ids: effectivePlantIds,
-          department_ids: isItAdmin ? null : (resolvedDept ? [resolvedDept] : null),
+          department_ids: effectiveDeptIds,
         }),
       });
 
@@ -369,7 +407,30 @@ function SettingsContent() {
           ? Array.from(new Set(effectivePlantIds.map((pid) => plants.find((p) => p.id === pid)?.location_id).filter(Boolean) as string[]))
           : (resolvedLoc ? [resolvedLoc] : null));
     const effectiveLoc = resolvedLoc || (derivedLocIds && derivedLocIds.length > 0 ? derivedLocIds[0] : null);
-    const resolvedDept = isFacilityAdmin ? (currentUser?.department_id || userDeptId || null) : (isItAdmin ? null : (userDeptId || null));
+
+    let effectiveDeptIds: string[] | null = null;
+    let resolvedDept: string | null = null;
+
+    if (!isItAdmin) {
+      if (resolvedRole === 'admin') {
+        if (userAllDepts) {
+          effectiveDeptIds = null;
+          resolvedDept = null;
+        } else if (userDeptIds.length > 0) {
+          effectiveDeptIds = userDeptIds;
+          resolvedDept = userDeptIds[0];
+        } else if (userDeptId) {
+          effectiveDeptIds = [userDeptId];
+          resolvedDept = userDeptId;
+        } else {
+          setUserModalError('Please select at least one Department or check "All Departments" for this Admin.');
+          return;
+        }
+      } else {
+        resolvedDept = isFacilityAdmin ? (currentUser?.department_id || userDeptId || null) : (userDeptId || null);
+        effectiveDeptIds = resolvedDept ? [resolvedDept] : null;
+      }
+    }
 
     setSavingUser(true);
     setUserModalError(null);
@@ -392,7 +453,7 @@ function SettingsContent() {
           can_manage_employees: isItAdmin || resolvedRole === 'admin' || resolvedRole === 'hr' ? true : userCanManageEmployees,
           location_ids: isItAdmin ? null : (derivedLocIds && derivedLocIds.length > 0 ? derivedLocIds : (effectiveLoc ? [effectiveLoc] : null)),
           plant_ids: effectivePlantIds,
-          department_ids: isItAdmin ? null : (resolvedDept ? [resolvedDept] : null),
+          department_ids: effectiveDeptIds,
         }),
       });
 
@@ -1503,7 +1564,20 @@ function SettingsContent() {
                             ) : (
                               <>
                                 <div className="font-semibold text-slate-800">
-                                  {userDept?.name || (u.scope?.department_ids?.length ? `${u.scope.department_ids.length} Dept(s)` : 'All Departments')}
+                                  {u.role === 'admin' && (!u.scope?.department_ids || u.scope.department_ids.length === 0) ? (
+                                    <span className="inline-flex items-center gap-1 font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded text-[10px]">
+                                      All Departments (Plant-wide)
+                                    </span>
+                                  ) : u.scope?.department_ids && u.scope.department_ids.length > 1 ? (
+                                    <span
+                                      className="inline-flex items-center gap-1 font-bold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded text-[10px] cursor-help"
+                                      title={departments.filter((d) => u.scope?.department_ids?.includes(d.id)).map((d) => d.name).join(', ')}
+                                    >
+                                      {u.scope.department_ids.length} Depts: {departments.filter((d) => u.scope?.department_ids?.includes(d.id)).map((d) => d.code || d.name).join(', ')}
+                                    </span>
+                                  ) : (
+                                    userDept?.name || 'All Departments'
+                                  )}
                                 </div>
                                 <div className="text-[11px] text-slate-400">
                                   Sub: {u.sub_department || 'None'}
@@ -2538,49 +2612,69 @@ function SettingsContent() {
                       </select>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Department {isFacilityAdmin ? '' : '*'}
-                      </label>
-                      {isFacilityAdmin ? (
-                        <div className="w-full bg-blue-50/70 border border-blue-200 rounded-xl px-3 py-2 text-xs font-bold text-blue-800 truncate flex items-center justify-between">
-                          <span className="truncate">
-                            {departments.find((d) => d.id === (currentUser?.department_id || userDeptId))?.name || 'Assigned Department'}
-                          </span>
-                          <span className="text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded uppercase font-semibold shrink-0 ml-1">
-                            Your Dept
-                          </span>
-                        </div>
-                      ) : (
-                        <select
-                          required
-                          value={userDeptId}
-                          onChange={(e) => setUserDeptId(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer"
-                        >
-                          <option value="">-- Select Department --</option>
-                          {departments.map((d) => (
-                            <option key={d.id} value={d.id}>
-                              {d.name} ({d.code})
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
+                    {userRole === 'admin' ? (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Sub Department (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={userSubDept}
+                          onChange={(e) => setUserSubDept(e.target.value)}
+                          placeholder="e.g. Line 3 or None"
+                          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Department {isFacilityAdmin ? '' : '*'}
+                        </label>
+                        {isFacilityAdmin ? (
+                          <div className="w-full bg-blue-50/70 border border-blue-200 rounded-xl px-3 py-2 text-xs font-bold text-blue-800 truncate flex items-center justify-between">
+                            <span className="truncate">
+                              {departments.find((d) => d.id === (currentUser?.department_id || userDeptId))?.name || 'Assigned Department'}
+                            </span>
+                            <span className="text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded uppercase font-semibold shrink-0 ml-1">
+                              Your Dept
+                            </span>
+                          </div>
+                        ) : (
+                          <select
+                            required
+                            value={userDeptId}
+                            onChange={(e) => {
+                              setUserDeptId(e.target.value);
+                              setUserDeptIds(e.target.value ? [e.target.value] : []);
+                            }}
+                            className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer"
+                          >
+                            <option value="">-- Select Department --</option>
+                            {departments.map((d) => (
+                              <option key={d.id} value={d.id}>
+                                {d.name} ({d.code})
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Sub Department (or "None")
-                    </label>
-                    <input
-                      type="text"
-                      value={userSubDept}
-                      onChange={(e) => setUserSubDept(e.target.value)}
-                      placeholder="e.g. Line 3 or None"
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                    />
-                  </div>
+                  {userRole !== 'admin' && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Sub Department (or "None")
+                      </label>
+                      <input
+                        type="text"
+                        value={userSubDept}
+                        onChange={(e) => setUserSubDept(e.target.value)}
+                        placeholder="e.g. Line 3 or None"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                      />
+                    </div>
+                  )}
 
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
@@ -2685,6 +2779,156 @@ function SettingsContent() {
                       </p>
                     )}
                   </div>
+
+                  {userRole === 'admin' && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                          <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Assigned Department(s) *</span>
+                          <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded-full">
+                            {userAllDepts ? 'All Departments' : `${userDeptIds.length} Selected`}
+                          </span>
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-1 text-[11px] font-semibold text-slate-700 cursor-pointer bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded-lg border border-slate-200 transition">
+                            <input
+                              type="checkbox"
+                              checked={userAllDepts}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setUserAllDepts(checked);
+                                if (checked) {
+                                  setUserDeptIds([]);
+                                  setUserDeptId('');
+                                }
+                              }}
+                              className="h-3.5 w-3.5 rounded text-blue-600 focus:ring-0 cursor-pointer"
+                            />
+                            <span>All Departments</span>
+                          </label>
+                          {!userAllDepts && (
+                            <>
+                              <span className="text-slate-300 text-xs">|</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const allIds = departments.map((d) => d.id);
+                                  setUserDeptIds(allIds);
+                                  if (allIds.length > 0) setUserDeptId(allIds[0]);
+                                }}
+                                className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                              >
+                                Select All
+                              </button>
+                              <span className="text-slate-300 text-xs">|</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setUserDeptIds([]);
+                                  setUserDeptId('');
+                                }}
+                                className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 hover:underline cursor-pointer"
+                              >
+                                Clear
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {userAllDepts ? (
+                        <div className="border border-indigo-200 rounded-xl p-3 bg-indigo-50/70 text-xs text-indigo-900 flex items-center gap-2.5">
+                          <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+                          <span>This Admin has unrestricted access to <strong>ALL departments</strong> across their assigned production plants.</span>
+                        </div>
+                      ) : (
+                        <div className="border border-slate-200 rounded-xl p-2.5 bg-slate-50/70 max-h-44 overflow-y-auto">
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {departments.map((d) => {
+                              const isChecked = userDeptIds.includes(d.id) || (!userAllDepts && userDeptId === d.id);
+                              const deptPlant = plants.find((p) => p.id === d.plant_id);
+                              return (
+                                <button
+                                  key={d.id}
+                                  type="button"
+                                  onClick={() => {
+                                    let next: string[];
+                                    if (isChecked) {
+                                      next = userDeptIds.filter((id) => id !== d.id);
+                                      if (userDeptId === d.id) {
+                                        setUserDeptId(next[0] || '');
+                                      }
+                                    } else {
+                                      next = [...userDeptIds.filter((id) => id !== d.id), d.id];
+                                      if (!userDeptId) setUserDeptId(d.id);
+                                    }
+                                    setUserDeptIds(next);
+                                  }}
+                                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-xs transition border cursor-pointer ${
+                                    isChecked
+                                      ? 'bg-blue-50 border-blue-400 text-blue-900 font-medium shadow-xs'
+                                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100/80 hover:border-slate-300'
+                                  }`}
+                                >
+                                  <div
+                                    className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border transition ${
+                                      isChecked
+                                        ? 'bg-blue-600 border-blue-600 text-white'
+                                        : 'border-slate-300 bg-white'
+                                    }`}
+                                  >
+                                    {isChecked && (
+                                      <Check className="w-3 h-3 stroke-[3]" />
+                                    )}
+                                  </div>
+                                  <div className="truncate min-w-0">
+                                    <div className="truncate font-semibold text-xs leading-tight">
+                                      {d.name}
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 truncate">
+                                      {d.code} {deptPlant ? `• ${deptPlant.code || deptPlant.name}` : ''}
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {!userAllDepts && userDeptIds.length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {departments
+                            .filter((d) => userDeptIds.includes(d.id))
+                            .map((d) => (
+                              <span
+                                key={d.id}
+                                className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-[10px] font-semibold px-2 py-0.5 rounded-md border border-blue-200"
+                              >
+                                {d.name}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const next = userDeptIds.filter((id) => id !== d.id);
+                                    setUserDeptIds(next);
+                                    if (userDeptId === d.id) setUserDeptId(next[0] || '');
+                                  }}
+                                  className="hover:text-red-500 cursor-pointer ml-0.5"
+                                >
+                                  &times;
+                                </button>
+                              </span>
+                            ))}
+                        </div>
+                      )}
+                      {!userAllDepts && userDeptIds.length === 0 && (
+                        <p className="text-[11px] text-amber-600 font-medium">
+                          * Please select at least one department, or check "All Departments".
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
 
@@ -2887,48 +3131,68 @@ function SettingsContent() {
                       </select>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Department
-                      </label>
-                      {isFacilityAdmin ? (
-                        <div className="w-full bg-blue-50/70 border border-blue-200 rounded-xl px-3 py-2 text-xs font-bold text-blue-800 truncate flex items-center justify-between">
-                          <span className="truncate">
-                            {departments.find((d) => d.id === (currentUser?.department_id || userDeptId))?.name || 'Assigned Department'}
-                          </span>
-                          <span className="text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded uppercase font-semibold shrink-0 ml-1">
-                            Your Dept
-                          </span>
-                        </div>
-                      ) : (
-                        <select
-                          value={userDeptId}
-                          onChange={(e) => setUserDeptId(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer"
-                        >
-                          <option value="">-- All / Unrestricted --</option>
-                          {departments.map((d) => (
-                            <option key={d.id} value={d.id}>
-                              {d.name}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
+                    {userRole === 'admin' ? (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Sub Department (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={userSubDept}
+                          onChange={(e) => setUserSubDept(e.target.value)}
+                          placeholder="e.g. Line 1, Shift B, or None"
+                          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Department
+                        </label>
+                        {isFacilityAdmin ? (
+                          <div className="w-full bg-blue-50/70 border border-blue-200 rounded-xl px-3 py-2 text-xs font-bold text-blue-800 truncate flex items-center justify-between">
+                            <span className="truncate">
+                              {departments.find((d) => d.id === (currentUser?.department_id || userDeptId))?.name || 'Assigned Department'}
+                            </span>
+                            <span className="text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded uppercase font-semibold shrink-0 ml-1">
+                              Your Dept
+                            </span>
+                          </div>
+                        ) : (
+                          <select
+                            value={userDeptId}
+                            onChange={(e) => {
+                              setUserDeptId(e.target.value);
+                              setUserDeptIds(e.target.value ? [e.target.value] : []);
+                            }}
+                            className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer"
+                          >
+                            <option value="">-- Select Department --</option>
+                            {departments.map((d) => (
+                              <option key={d.id} value={d.id}>
+                                {d.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Sub Department
-                    </label>
-                    <input
-                      type="text"
-                      value={userSubDept}
-                      onChange={(e) => setUserSubDept(e.target.value)}
-                      placeholder="e.g. Line 1, Shift B, or None"
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                    />
-                  </div>
+                  {userRole !== 'admin' && (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Sub Department
+                      </label>
+                      <input
+                        type="text"
+                        value={userSubDept}
+                        onChange={(e) => setUserSubDept(e.target.value)}
+                        placeholder="e.g. Line 1, Shift B, or None"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                      />
+                    </div>
+                  )}
 
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
@@ -3053,6 +3317,156 @@ function SettingsContent() {
                       </div>
                     )}
                   </div>
+
+                  {userRole === 'admin' && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                          <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Assigned Department(s) *</span>
+                          <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded-full">
+                            {userAllDepts ? 'All Departments' : `${userDeptIds.length} Selected`}
+                          </span>
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-1 text-[11px] font-semibold text-slate-700 cursor-pointer bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded-lg border border-slate-200 transition">
+                            <input
+                              type="checkbox"
+                              checked={userAllDepts}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setUserAllDepts(checked);
+                                if (checked) {
+                                  setUserDeptIds([]);
+                                  setUserDeptId('');
+                                }
+                              }}
+                              className="h-3.5 w-3.5 rounded text-blue-600 focus:ring-0 cursor-pointer"
+                            />
+                            <span>All Departments</span>
+                          </label>
+                          {!userAllDepts && (
+                            <>
+                              <span className="text-slate-300 text-xs">|</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const allIds = departments.map((d) => d.id);
+                                  setUserDeptIds(allIds);
+                                  if (allIds.length > 0) setUserDeptId(allIds[0]);
+                                }}
+                                className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                              >
+                                Select All
+                              </button>
+                              <span className="text-slate-300 text-xs">|</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setUserDeptIds([]);
+                                  setUserDeptId('');
+                                }}
+                                className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 hover:underline cursor-pointer"
+                              >
+                                Clear
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {userAllDepts ? (
+                        <div className="border border-indigo-200 rounded-xl p-3 bg-indigo-50/70 text-xs text-indigo-900 flex items-center gap-2.5">
+                          <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+                          <span>This Admin has unrestricted access to <strong>ALL departments</strong> across their assigned production plants.</span>
+                        </div>
+                      ) : (
+                        <div className="border border-slate-200 rounded-xl p-2.5 bg-slate-50/70 max-h-44 overflow-y-auto">
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {departments.map((d) => {
+                              const isChecked = userDeptIds.includes(d.id) || (!userAllDepts && userDeptId === d.id);
+                              const deptPlant = plants.find((p) => p.id === d.plant_id);
+                              return (
+                                <button
+                                  key={d.id}
+                                  type="button"
+                                  onClick={() => {
+                                    let next: string[];
+                                    if (isChecked) {
+                                      next = userDeptIds.filter((id) => id !== d.id);
+                                      if (userDeptId === d.id) {
+                                        setUserDeptId(next[0] || '');
+                                      }
+                                    } else {
+                                      next = [...userDeptIds.filter((id) => id !== d.id), d.id];
+                                      if (!userDeptId) setUserDeptId(d.id);
+                                    }
+                                    setUserDeptIds(next);
+                                  }}
+                                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left text-xs transition border cursor-pointer ${
+                                    isChecked
+                                      ? 'bg-blue-50 border-blue-400 text-blue-900 font-medium shadow-xs'
+                                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100/80 hover:border-slate-300'
+                                  }`}
+                                >
+                                  <div
+                                    className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border transition ${
+                                      isChecked
+                                        ? 'bg-blue-600 border-blue-600 text-white'
+                                        : 'border-slate-300 bg-white'
+                                    }`}
+                                  >
+                                    {isChecked && (
+                                      <Check className="w-3 h-3 stroke-[3]" />
+                                    )}
+                                  </div>
+                                  <div className="truncate min-w-0">
+                                    <div className="truncate font-semibold text-xs leading-tight">
+                                      {d.name}
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 truncate">
+                                      {d.code} {deptPlant ? `• ${deptPlant.code || deptPlant.name}` : ''}
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {!userAllDepts && userDeptIds.length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {departments
+                            .filter((d) => userDeptIds.includes(d.id))
+                            .map((d) => (
+                              <span
+                                key={d.id}
+                                className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-[10px] font-semibold px-2 py-0.5 rounded-md border border-blue-200"
+                              >
+                                {d.name}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const next = userDeptIds.filter((id) => id !== d.id);
+                                    setUserDeptIds(next);
+                                    if (userDeptId === d.id) setUserDeptId(next[0] || '');
+                                  }}
+                                  className="hover:text-red-500 cursor-pointer ml-0.5"
+                                >
+                                  &times;
+                                </button>
+                              </span>
+                            ))}
+                        </div>
+                      )}
+                      {!userAllDepts && userDeptIds.length === 0 && (
+                        <p className="text-[11px] text-amber-600 font-medium">
+                          * Please select at least one department, or check "All Departments".
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
 

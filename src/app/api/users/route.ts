@@ -142,6 +142,17 @@ export async function POST(req: NextRequest) {
       ? null
       : (incomingPlantIds && incomingPlantIds.length > 0 ? incomingPlantIds[0] : resolvedPltId);
 
+    const incomingDeptIds: string[] | null = isItAdmin
+      ? null
+      : Array.isArray(department_ids) && department_ids.length > 0
+      ? department_ids
+      : resolvedDeptId
+      ? [resolvedDeptId]
+      : null;
+    const primaryDeptId = isItAdmin
+      ? null
+      : (incomingDeptIds && incomingDeptIds.length > 0 ? incomingDeptIds[0] : (resolvedRole === 'admin' ? null : resolvedDeptId));
+
     const createdUser = await createUser(
       {
         email: email.trim(),
@@ -151,7 +162,7 @@ export async function POST(req: NextRequest) {
         role: resolvedRole,
         location_id: isItAdmin ? null : resolvedLocId,
         plant_id: primaryPlantId,
-        department_id: isItAdmin ? null : resolvedDeptId,
+        department_id: isItAdmin ? null : primaryDeptId,
         sub_department: isItAdmin ? null : (sub_department && sub_department.toLowerCase() !== 'none' ? sub_department.trim() : null),
       },
       {
@@ -160,7 +171,7 @@ export async function POST(req: NextRequest) {
         category_ids: isItAdmin ? null : (Array.isArray(category_ids) && category_ids.length > 0 ? category_ids : null),
         location_ids: isItAdmin ? null : (Array.isArray(location_ids) && location_ids.length > 0 ? location_ids : (resolvedLocId ? [resolvedLocId] : null)),
         plant_ids: incomingPlantIds,
-        department_ids: isItAdmin ? null : (Array.isArray(department_ids) && department_ids.length > 0 ? department_ids : (resolvedDeptId ? [resolvedDeptId] : null)),
+        department_ids: incomingDeptIds,
         sub_department: isItAdmin ? null : (sub_department && sub_department.toLowerCase() !== 'none' ? sub_department.trim() : null),
       }
     );
@@ -321,7 +332,11 @@ export async function PATCH(req: NextRequest) {
       } else if (plant_id !== undefined) {
         userUpdates.plant_id = plant_id || null;
       }
-      if (department_id !== undefined) userUpdates.department_id = department_id || null;
+      if (department_ids !== undefined) {
+        userUpdates.department_id = Array.isArray(department_ids) && department_ids.length > 0 ? department_ids[0] : null;
+      } else if (department_id !== undefined) {
+        userUpdates.department_id = department_id || null;
+      }
       if (sub_department !== undefined) {
         userUpdates.sub_department = sub_department && sub_department.toLowerCase() !== 'none' ? sub_department.trim() : null;
       }
@@ -338,7 +353,11 @@ export async function PATCH(req: NextRequest) {
       : Array.isArray(plant_ids)
       ? (plant_ids.length > 0 ? plant_ids : null)
       : (plant_id ? [plant_id] : (userUpdates.plant_id ? [userUpdates.plant_id as string] : null));
-    const resolvedDeptIds = isItAdmin ? null : (department_ids && department_ids.length > 0 ? department_ids : (department_id ? [department_id] : null));
+    const resolvedDeptIds = isItAdmin
+      ? null
+      : department_ids !== undefined
+      ? (Array.isArray(department_ids) && department_ids.length > 0 ? department_ids : null)
+      : (department_id ? [department_id] : (userUpdates.department_id ? [userUpdates.department_id as string] : null));
 
     await updateUserScope(userId, {
       can_edit: isItAdmin ? true : Boolean(can_edit ?? true),

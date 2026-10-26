@@ -3674,13 +3674,16 @@ export async function getUsersWithScopes(): Promise<Array<User & { scope?: UserS
     const parsedPltIds = parseScopeArray(scope?.plant_ids);
     const parsedDeptIds = parseScopeArray(scope?.department_ids);
 
-    const resolvedDeptId = parsedDeptIds?.[0] || scope?.category_ids?.[0] || deptMapByAdmin.get(u.id) || null;
+    const hasExplicitDepts = Boolean(parsedDeptIds && parsedDeptIds.length > 0);
+    const isAllDeptAdmin = (u.role === 'admin' || u.role === 'it_admin') && !hasExplicitDepts;
+    const resolvedDeptId = hasExplicitDepts
+      ? parsedDeptIds![0]
+      : isAllDeptAdmin
+      ? null
+      : u.department_id || deptMapByAdmin.get(u.id) || null;
+
     const resolvedLocId = u.location_id || parsedLocIds?.[0] || null;
     const resolvedPltId = u.plant_id || parsedPltIds?.[0] || null;
-
-    if (scope && resolvedDeptId && (!parsedDeptIds || parsedDeptIds.length === 0)) {
-      scope.department_ids = [resolvedDeptId];
-    }
 
     return {
       ...u,
@@ -3693,7 +3696,11 @@ export async function getUsersWithScopes(): Promise<Array<User & { scope?: UserS
             can_manage_employees: Boolean(scope.can_manage_employees),
             location_ids: parsedLocIds,
             plant_ids: parsedPltIds,
-            department_ids: parsedDeptIds || (resolvedDeptId ? [resolvedDeptId] : null),
+            department_ids: hasExplicitDepts
+              ? parsedDeptIds
+              : isAllDeptAdmin
+              ? null
+              : (resolvedDeptId ? [resolvedDeptId] : null),
             category_ids: null,
           }
         : null,

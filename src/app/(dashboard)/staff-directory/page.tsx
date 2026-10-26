@@ -349,9 +349,15 @@ function StaffDirectoryContent() {
 
   const authorizedDeptIds = useMemo(() => {
     if (isGlobalITAdmin) return null;
+    if (currentUser?.role === 'admin' && (!userScope?.department_ids || userScope.department_ids.length === 0)) {
+      return null;
+    }
     const ids = new Set<string>();
-    if (currentUser?.department_id) ids.add(currentUser.department_id);
-    if (userScope?.department_ids) userScope.department_ids.forEach((id) => ids.add(id));
+    if (userScope?.department_ids && userScope.department_ids.length > 0) {
+      userScope.department_ids.forEach((id) => ids.add(id));
+    } else if (currentUser?.department_id) {
+      ids.add(currentUser.department_id);
+    }
     return ids.size > 0 ? ids : null;
   }, [isGlobalITAdmin, currentUser, userScope]);
 
