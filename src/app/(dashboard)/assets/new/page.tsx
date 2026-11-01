@@ -40,6 +40,7 @@ import {
   Warehouse,
   ChevronDown,
   RefreshCw,
+  RotateCcw,
 } from 'lucide-react';
 
 const SEED_LOCATIONS: Location[] = [
@@ -109,6 +110,20 @@ const DEFAULT_DEPT_CATEGORIES: Record<string, string[]> = {
 };
 
 type OptionListKey = 'brands' | 'models' | 'vendors' | 'processors' | 'ram_options' | 'storage_options' | 'os_options';
+
+export interface POSuggestionItem {
+  po_number: string;
+  vendor_name: string | null;
+  invoice_number: string | null;
+  invoice_date: string | null;
+  purchase_date: string | null;
+  warranty_expiry: string | null;
+  amc_vendor: string | null;
+  amc_expiry: string | null;
+  manufacturer: string | null;
+  asset_count: number;
+  last_used: string;
+}
 
 const IT_DEFAULT_OPTIONS: Record<OptionListKey, string[]> = {
   brands: ['LENOVO', 'DELL', 'HP', 'APPLE', 'ASUS', 'ACER', 'SAMSUNG', 'LG', 'CISCO'],
@@ -487,6 +502,15 @@ function AssetWizardContent() {
   const [osOptions, setOsOptions] = useState<string[]>([]);
   const [dynamicSelectOptions, setDynamicSelectOptions] = useState<Record<string, string[]>>({});
 
+  // 30-Day Central DB Suggestions State (PO, Serial, SAP, Brands, Vendors)
+  const [poSuggestions, setPoSuggestions] = useState<POSuggestionItem[]>([]);
+  const [serialSuggestions, setSerialSuggestions] = useState<string[]>([]);
+  const [sapSuggestions, setSapSuggestions] = useState<string[]>([]);
+  const [showPoDropdown, setShowPoDropdown] = useState(false);
+  const [showSerialDropdown, setShowSerialDropdown] = useState(false);
+  const [showSapDropdown, setShowSapDropdown] = useState(false);
+  const [poAutoFilledToast, setPoAutoFilledToast] = useState<string | null>(null);
+
   // Custom Field Creator & Hidden Fields State
   const [showAddFieldModal, setShowAddFieldModal] = useState(false);
   const [newFieldLabel, setNewFieldLabel] = useState('');
@@ -503,18 +527,59 @@ function AssetWizardContent() {
   const [optionsDept, setOptionsDept] = useState<string | null>(null);
   const optionsReady = optionsDept === optionDeptKey;
 
+  // Save expiring custom option to local storage with 30-day timestamp
+  const saveExpiringOption = (list: OptionListKey, val: string) => {
+    try {
+      const key = optionStorageKey(list);
+      const raw = localStorage.getItem(key);
+      let items: Array<{ value: string; lastUsed: number }> = [];
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            items = parsed.map((x) => (typeof x === 'string' ? { value: x, lastUsed: Date.now() } : x));
+          }
+        } catch {}
+      }
+      items = [{ value: val, lastUsed: Date.now() }, ...items.filter((x) => x?.value !== val)];
+      localStorage.setItem(key, JSON.stringify(items));
+    } catch {}
+  };
+
+  // Load options with 30-day expiration check
   useEffect(() => {
     const load = (list: OptionListKey): string[] => {
+      const defaults = isItOptionDept ? IT_DEFAULT_OPTIONS[list] : [];
       try {
-        // The old shared list mixed entries from every department, so it is discarded.
         localStorage.removeItem(`aems_${list}`);
         const saved = localStorage.getItem(`aems_${list}::${optionDeptKey}`);
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) return parsed;
+          if (Array.isArray(parsed)) {
+            const now = Date.now();
+            const TTL_30_DAYS = 30 * 24 * 60 * 60 * 1000;
+            const validCustom: string[] = [];
+            const remainingToSave: Array<{ value: string; lastUsed: number }> = [];
+
+            for (const item of parsed) {
+              if (typeof item === 'string') {
+                validCustom.push(item);
+                remainingToSave.push({ value: item, lastUsed: now });
+              } else if (item && typeof item === 'object' && typeof item.value === 'string') {
+                if (!item.lastUsed || now - item.lastUsed <= TTL_30_DAYS) {
+                  validCustom.push(item.value);
+                  remainingToSave.push(item);
+                }
+              }
+            }
+            try {
+              localStorage.setItem(`aems_${list}::${optionDeptKey}`, JSON.stringify(remainingToSave));
+            } catch {}
+            return Array.from(new Set([...validCustom, ...defaults]));
+          }
         }
       } catch {}
-      return isItOptionDept ? IT_DEFAULT_OPTIONS[list] : [];
+      return defaults;
     };
     setBrands(load('brands'));
     setModels(load('models'));
@@ -526,13 +591,44 @@ function AssetWizardContent() {
     setOptionsDept(optionDeptKey);
   }, [optionDeptKey, isItOptionDept]);
 
+  // Load Central Suggestions from MySQL Database (Syncs across all LAN PCs)
+  useEffect(() => {
+    let isMounted = true;
+    async function loadCentralSuggestions() {
+      try {
+        const res = await fetch('/api/assets/suggestions');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!isMounted) return;
+
+        if (Array.isArray(data.pos)) setPoSuggestions(data.pos);
+        if (Array.isArray(data.serials)) setSerialSuggestions(data.serials);
+        if (Array.isArray(data.sapCodes)) setSapSuggestions(data.sapCodes);
+
+        // Merge active 30-day brands, models, and vendors into current department dropdowns
+        if (Array.isArray(data.brands) && data.brands.length > 0) {
+          setBrands((prev) => Array.from(new Set([...data.brands, ...prev])));
+        }
+        if (Array.isArray(data.models) && data.models.length > 0) {
+          setModels((prev) => Array.from(new Set([...data.models, ...prev])));
+        }
+        if (Array.isArray(data.vendors) && data.vendors.length > 0) {
+          setVendors((prev) => Array.from(new Set([...data.vendors, ...prev])));
+        }
+      } catch (err) {
+        console.warn('Could not load central suggestions:', err);
+      }
+    }
+    loadCentralSuggestions();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const handleAddBrand = (b: string) => {
     if (!optionsReady) return;
-    setBrands((prev) => {
-      const updated = [b, ...prev.filter((x) => x !== b)];
-      try { localStorage.setItem(optionStorageKey('brands'), JSON.stringify(updated)); } catch {}
-      return updated;
-    });
+    setBrands((prev) => [b, ...prev.filter((x) => x !== b)]);
+    saveExpiringOption('brands', b);
   };
 
   const handleDeleteBrand = (b: string) => {
@@ -547,11 +643,8 @@ function AssetWizardContent() {
 
   const handleAddModel = (m: string) => {
     if (!optionsReady) return;
-    setModels((prev) => {
-      const updated = [m, ...prev.filter((x) => x !== m)];
-      try { localStorage.setItem(optionStorageKey('models'), JSON.stringify(updated)); } catch {}
-      return updated;
-    });
+    setModels((prev) => [m, ...prev.filter((x) => x !== m)]);
+    saveExpiringOption('models', m);
   };
 
   const handleDeleteModel = (m: string) => {
@@ -566,11 +659,8 @@ function AssetWizardContent() {
 
   const handleAddVendor = (v: string) => {
     if (!optionsReady) return;
-    setVendors((prev) => {
-      const updated = [v, ...prev.filter((x) => x !== v)];
-      try { localStorage.setItem(optionStorageKey('vendors'), JSON.stringify(updated)); } catch {}
-      return updated;
-    });
+    setVendors((prev) => [v, ...prev.filter((x) => x !== v)]);
+    saveExpiringOption('vendors', v);
   };
 
   const handleDeleteVendor = (v: string) => {
@@ -585,11 +675,8 @@ function AssetWizardContent() {
 
   const handleAddProcessor = (p: string) => {
     if (!optionsReady) return;
-    setProcessors((prev) => {
-      const updated = [p, ...prev.filter((x) => x !== p)];
-      try { localStorage.setItem(optionStorageKey('processors'), JSON.stringify(updated)); } catch {}
-      return updated;
-    });
+    setProcessors((prev) => [p, ...prev.filter((x) => x !== p)]);
+    saveExpiringOption('processors', p);
   };
 
   const handleDeleteProcessor = (p: string) => {
@@ -605,11 +692,8 @@ function AssetWizardContent() {
     if (!optionsReady) return;
     const clean = val.trim().toUpperCase();
     if (!clean) return;
-    setRamOptions((prev) => {
-      const updated = [clean, ...prev.filter((x) => x !== clean)];
-      try { localStorage.setItem(optionStorageKey('ram_options'), JSON.stringify(updated)); } catch {}
-      return updated;
-    });
+    setRamOptions((prev) => [clean, ...prev.filter((x) => x !== clean)]);
+    saveExpiringOption('ram_options', clean);
   };
 
   const handleDeleteRam = (val: string) => {
@@ -625,11 +709,8 @@ function AssetWizardContent() {
     if (!optionsReady) return;
     const clean = val.trim().toUpperCase();
     if (!clean) return;
-    setStorageOptions((prev) => {
-      const updated = [clean, ...prev.filter((x) => x !== clean)];
-      try { localStorage.setItem(optionStorageKey('storage_options'), JSON.stringify(updated)); } catch {}
-      return updated;
-    });
+    setStorageOptions((prev) => [clean, ...prev.filter((x) => x !== clean)]);
+    saveExpiringOption('storage_options', clean);
   };
 
   const handleDeleteStorage = (val: string) => {
@@ -645,11 +726,8 @@ function AssetWizardContent() {
     if (!optionsReady) return;
     const clean = val.trim().toUpperCase();
     if (!clean) return;
-    setOsOptions((prev) => {
-      const updated = [clean, ...prev.filter((x) => x !== clean)];
-      try { localStorage.setItem(optionStorageKey('os_options'), JSON.stringify(updated)); } catch {}
-      return updated;
-    });
+    setOsOptions((prev) => [clean, ...prev.filter((x) => x !== clean)]);
+    saveExpiringOption('os_options', clean);
   };
 
   const handleDeleteOs = (val: string) => {
@@ -660,6 +738,63 @@ function AssetWizardContent() {
       return updated;
     });
   };
+
+  // PO Selection & Commercial Auto-Fill Handlers
+  const handleSelectPO = (po: POSuggestionItem) => {
+    setPoNumber(po.po_number);
+    if (po.vendor_name) setVendorName(po.vendor_name);
+    if (po.invoice_number) setInvoiceNumber(po.invoice_number);
+    if (po.invoice_date) setInvoiceDate(po.invoice_date.slice(0, 10));
+    if (po.purchase_date) setPurchaseDate(po.purchase_date.slice(0, 10));
+    if (po.warranty_expiry) setWarrantyExpiry(po.warranty_expiry.slice(0, 10));
+    if (po.amc_vendor) setAmcVendor(po.amc_vendor);
+    if (po.amc_expiry) setAmcExpiry(po.amc_expiry.slice(0, 10));
+    if (!manufacturer.trim() && po.manufacturer) setManufacturer(po.manufacturer);
+
+    // Note: purchaseCost is explicitly NOT auto-filled per user's decision (manual input required)
+    setShowPoDropdown(false);
+    setPoAutoFilledToast(`✓ Auto-filled commercial details for PO: ${po.po_number}`);
+    setTimeout(() => setPoAutoFilledToast(null), 4000);
+  };
+
+  const handleClearPODetails = () => {
+    setPoNumber('');
+    setVendorName('');
+    setInvoiceNumber('');
+    setInvoiceDate('');
+    setPurchaseDate('');
+    setPurchaseCost('');
+    setWarrantyExpiry('');
+    setAmcVendor('');
+    setAmcExpiry('');
+    setShowPoDropdown(false);
+    setPoAutoFilledToast('Commercial details cleared.');
+    setTimeout(() => setPoAutoFilledToast(null), 2500);
+  };
+
+  const handlePoBlur = () => {
+    setTimeout(() => {
+      setShowPoDropdown(false);
+      const trimmed = poNumber.trim().toUpperCase();
+      if (!trimmed) return;
+      const matched = poSuggestions.find((p) => p.po_number.toUpperCase() === trimmed);
+      if (matched && (!vendorName.trim() || !purchaseDate || !warrantyExpiry)) {
+        handleSelectPO(matched);
+      }
+    }, 250);
+  };
+
+  const filteredPoSuggestions = poSuggestions.filter((p) =>
+    poNumber.trim() ? p.po_number.toLowerCase().includes(poNumber.trim().toLowerCase()) : true
+  );
+
+  const filteredSerialSuggestions = serialSuggestions
+    .filter((s) => (serialNumber.trim() ? s.toLowerCase().includes(serialNumber.trim().toLowerCase()) : true))
+    .slice(0, 8);
+
+  const filteredSapSuggestions = sapSuggestions
+    .filter((c) => (sapAssetCode.trim() ? c.toLowerCase().includes(sapAssetCode.trim().toLowerCase()) : true))
+    .slice(0, 8);
 
   const handleAddDynamicOption = (fieldId: string, val: string, initialOptions: string[]) => {
     const clean = val.trim().toUpperCase();
@@ -3202,7 +3337,7 @@ function AssetWizardContent() {
               </div>
 
               {/* 3. Serial Number */}
-              <div>
+              <div className="relative">
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs font-semibold text-slate-600">Serial Number</label>
                   {serialChecking ? (
@@ -3215,19 +3350,46 @@ function AssetWizardContent() {
                     </span>
                   ) : null}
                 </div>
-                <input
-                  type="text"
-                  value={serialNumber}
-                  onChange={handleCapsChange(setSerialNumber)}
-                  placeholder="e.g. SN-981249A"
-                  className={`w-full border rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none uppercase transition-colors ${
-                    serialError
-                      ? 'bg-rose-50 border-rose-400 focus:border-rose-600'
-                      : serialValid
-                      ? 'bg-emerald-50/50 border-emerald-400 focus:border-emerald-600'
-                      : 'bg-slate-50 border-slate-200 focus:border-blue-500 focus:bg-white'
-                  }`}
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={serialNumber}
+                    onChange={handleCapsChange(setSerialNumber)}
+                    onFocus={() => setShowSerialDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowSerialDropdown(false), 250)}
+                    placeholder="e.g. SN-981249A"
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none uppercase transition-colors ${
+                      serialError
+                        ? 'bg-rose-50 border-rose-400 focus:border-rose-600'
+                        : serialValid
+                        ? 'bg-emerald-50/50 border-emerald-400 focus:border-emerald-600'
+                        : 'bg-slate-50 border-slate-200 focus:border-blue-500 focus:bg-white'
+                    }`}
+                  />
+                  {/* Serial Number Suggestions Dropdown */}
+                  {showSerialDropdown && filteredSerialSuggestions.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto divide-y divide-slate-100 animate-in fade-in slide-in-from-top-1 duration-150">
+                      <div className="px-2.5 py-1.5 bg-slate-50 border-b border-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                        <span>Recent Serials (30-Day History)</span>
+                        <span className="text-[9px] text-blue-600 font-normal">Click to reuse</span>
+                      </div>
+                      {filteredSerialSuggestions.map((s) => (
+                        <div
+                          key={s}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setSerialNumber(s);
+                            setShowSerialDropdown(false);
+                          }}
+                          className="px-3 py-1.5 text-xs font-mono text-slate-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer flex items-center justify-between transition-colors"
+                        >
+                          <span className="font-semibold">{s}</span>
+                          <span className="text-[10px] text-slate-400 font-sans">Recent</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 {serialError && (
                   <p className="text-[11px] text-rose-600 font-semibold mt-1">
                     ⚠️ {serialError}
@@ -3236,22 +3398,49 @@ function AssetWizardContent() {
               </div>
 
               {/* 4. Asset Code (According to SAP) - MANDATORY */}
-              <div>
+              <div className="relative">
                 <label className="block text-xs font-semibold text-slate-600 mb-1">
                   Asset Code (According to SAP) <span className="text-rose-500 font-bold">*</span>
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={sapAssetCode}
-                  onChange={handleCapsChange(setSapAssetCode)}
-                  placeholder="e.g. SAP-1002394"
-                  className={`w-full border rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none uppercase transition-colors ${
-                    !sapAssetCode.trim()
-                      ? 'bg-amber-50/40 border-amber-300 focus:border-amber-500 focus:bg-white'
-                      : 'bg-slate-50 border-slate-200 focus:border-blue-500 focus:bg-white'
-                  }`}
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    value={sapAssetCode}
+                    onChange={handleCapsChange(setSapAssetCode)}
+                    onFocus={() => setShowSapDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowSapDropdown(false), 250)}
+                    placeholder="e.g. SAP-1002394"
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none uppercase transition-colors ${
+                      !sapAssetCode.trim()
+                        ? 'bg-amber-50/40 border-amber-300 focus:border-amber-500 focus:bg-white'
+                        : 'bg-slate-50 border-slate-200 focus:border-blue-500 focus:bg-white'
+                    }`}
+                  />
+                  {/* SAP Code Suggestions Dropdown */}
+                  {showSapDropdown && filteredSapSuggestions.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto divide-y divide-slate-100 animate-in fade-in slide-in-from-top-1 duration-150">
+                      <div className="px-2.5 py-1.5 bg-slate-50 border-b border-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                        <span>Recent SAP Codes (30-Day History)</span>
+                        <span className="text-[9px] text-blue-600 font-normal">Click to reuse</span>
+                      </div>
+                      {filteredSapSuggestions.map((c) => (
+                        <div
+                          key={c}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setSapAssetCode(c);
+                            setShowSapDropdown(false);
+                          }}
+                          className="px-3 py-1.5 text-xs font-mono text-slate-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer flex items-center justify-between transition-colors"
+                        >
+                          <span className="font-semibold">{c}</span>
+                          <span className="text-[10px] text-slate-400 font-sans">Recent</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* 5. Asset Code / Tag (Clean - only code) */}
@@ -3347,22 +3536,78 @@ function AssetWizardContent() {
               </div>
 
               {/* PO Number */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
-                  PO Number {condition === 'new_purchase' ? <span className="text-rose-500 font-bold">* (Required)</span> : <span className="text-slate-400 font-normal">(Optional)</span>}
-                </label>
-                <input
-                  type="text"
-                  required={condition === 'new_purchase'}
-                  value={poNumber}
-                  onChange={handleCapsChange(setPoNumber)}
-                  placeholder={condition === 'new_purchase' ? 'PO-2024-XXXX (Mandatory)' : 'PO-2024-XXXX (Optional)'}
-                  className={`w-full border rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none uppercase ${
-                    condition === 'new_purchase' && !poNumber.trim()
-                      ? 'bg-amber-50/50 border-amber-300 focus:border-amber-500'
-                      : 'bg-slate-50 border-slate-200 focus:border-blue-500 focus:bg-white'
-                  }`}
-                />
+              <div className="relative">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-slate-600">
+                    PO Number {condition === 'new_purchase' ? <span className="text-rose-500 font-bold">* (Required)</span> : <span className="text-slate-400 font-normal">(Optional)</span>}
+                  </label>
+                  {(poNumber || vendorName || invoiceNumber || purchaseDate || warrantyExpiry) && (
+                    <button
+                      type="button"
+                      onClick={handleClearPODetails}
+                      className="text-[10px] text-slate-400 hover:text-rose-600 font-bold flex items-center gap-1 transition-colors cursor-pointer bg-slate-100 hover:bg-rose-50 px-2 py-0.5 rounded-md"
+                      title="Clear PO and reset all commercial fields"
+                    >
+                      <RotateCcw className="w-2.5 h-2.5" />
+                      <span>Clear PO Details</span>
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required={condition === 'new_purchase'}
+                    value={poNumber}
+                    onChange={handleCapsChange(setPoNumber)}
+                    onFocus={() => setShowPoDropdown(true)}
+                    onBlur={handlePoBlur}
+                    placeholder={condition === 'new_purchase' ? 'PO-2024-XXXX (Mandatory)' : 'PO-2024-XXXX (Optional)'}
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none uppercase ${
+                      condition === 'new_purchase' && !poNumber.trim()
+                        ? 'bg-amber-50/50 border-amber-300 focus:border-amber-500'
+                        : 'bg-slate-50 border-slate-200 focus:border-blue-500 focus:bg-white'
+                    }`}
+                  />
+                  {/* PO Suggestions Dropdown with Asset Count Badge & Vendor Info */}
+                  {showPoDropdown && filteredPoSuggestions.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-blue-200 rounded-xl shadow-xl overflow-hidden max-h-56 overflow-y-auto divide-y divide-slate-100 animate-in fade-in slide-in-from-top-1 duration-150">
+                      <div className="px-3 py-1.5 bg-blue-50/70 border-b border-blue-100 flex items-center justify-between text-[10px] font-bold text-blue-900 uppercase tracking-wider">
+                        <span>Active POs (Last 30 Days)</span>
+                        <span className="text-blue-600">{filteredPoSuggestions.length} Found</span>
+                      </div>
+                      {filteredPoSuggestions.map((po) => (
+                        <div
+                          key={po.po_number}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleSelectPO(po);
+                          }}
+                          className="px-3 py-2 text-xs hover:bg-blue-50 cursor-pointer flex flex-col gap-0.5 transition-colors group"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono text-blue-700 font-black group-hover:text-blue-800">
+                              {po.po_number}
+                            </span>
+                            <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full border border-blue-200">
+                              {po.asset_count} Asset{po.asset_count === 1 ? '' : 's'} Registered
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 truncate flex items-center gap-1.5 font-medium">
+                            <span className="text-slate-700 font-semibold">{po.vendor_name || 'Vendor N/A'}</span>
+                            {po.invoice_number && <span>• Inv: {po.invoice_number}</span>}
+                            {po.warranty_expiry && <span>• Warranty: {po.warranty_expiry}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {poAutoFilledToast && (
+                  <div className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-0.5 mt-1 font-semibold flex items-center gap-1 animate-in fade-in duration-150">
+                    <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                    <span>{poAutoFilledToast}</span>
+                  </div>
+                )}
               </div>
 
               {/* Invoice Number (Optional) */}

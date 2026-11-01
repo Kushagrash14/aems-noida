@@ -33,7 +33,7 @@ import {
 } from '@/lib/mock-data';
 import { env } from '@/lib/env';
 import { db } from '@/lib/db/client';
-import { getLockPool } from '@/lib/db/mysql';
+import { getLockPool, getPool } from '@/lib/db/mysql';
 import { persistDemoState } from '@/lib/demoPersistence';
 import { logAuditEvent } from '@/lib/audit';
 import { createHash } from 'crypto';
@@ -4581,5 +4581,213 @@ export async function batchImportAssets(
   invalidateAssetCache();
   invalidateMasterDataCache();
   return result;
+}
+
+export interface POSuggestionItem {
+  po_number: string;
+  vendor_name: string | null;
+  invoice_number: string | null;
+  invoice_date: string | null;
+  purchase_date: string | null;
+  warranty_expiry: string | null;
+  amc_vendor: string | null;
+  amc_expiry: string | null;
+  manufacturer: string | null;
+  asset_count: number;
+  last_used: string;
+}
+
+export interface AssetFormSuggestions {
+  pos: POSuggestionItem[];
+  serials: string[];
+  sapCodes: string[];
+  brands: string[];
+  models: string[];
+  vendors: string[];
+}
+
+export async function getAssetFormSuggestions(): Promise<AssetFormSuggestions> {
+  if (env.isMockMode) {
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const recent = memory.assets.filter(
+      (a) => !a.is_deleted && new Date(a.created_at || Date.now()).getTime() >= thirtyDaysAgo
+    );
+
+    const poMap = new Map<string, POSuggestionItem>();
+    const serialsSet = new Set<string>();
+    const sapSet = new Set<string>();
+    const brandSet = new Set<string>();
+    const modelSet = new Set<string>();
+    const vendorSet = new Set<string>();
+
+    for (const a of recent) {
+      if (a.po_number && a.po_number.trim()) {
+        const poKey = a.po_number.trim().toUpperCase();
+        const existing = poMap.get(poKey);
+        if (existing) {
+          existing.asset_count++;
+          if (!existing.vendor_name && a.vendor_name) existing.vendor_name = a.vendor_name;
+          if (!existing.invoice_number && a.invoice_number) existing.invoice_number = a.invoice_number;
+          if (!existing.invoice_date && a.invoice_date) existing.invoice_date = a.invoice_date.slice(0, 10);
+          if (!existing.purchase_date && a.purchase_date) existing.purchase_date = a.purchase_date.slice(0, 10);
+          if (!existing.warranty_expiry && a.warranty_expiry) existing.warranty_expiry = a.warranty_expiry.slice(0, 10);
+          if (!existing.amc_vendor && a.amc_vendor) existing.amc_vendor = a.amc_vendor;
+          if (!existing.amc_expiry && a.amc_expiry) existing.amc_expiry = a.amc_expiry.slice(0, 10);
+          if (!existing.manufacturer && a.manufacturer) existing.manufacturer = a.manufacturer;
+        } else {
+          poMap.set(poKey, {
+            po_number: poKey,
+            vendor_name: a.vendor_name || null,
+            invoice_number: a.invoice_number || null,
+            invoice_date: a.invoice_date ? a.invoice_date.slice(0, 10) : null,
+            purchase_date: a.purchase_date ? a.purchase_date.slice(0, 10) : null,
+            warranty_expiry: a.warranty_expiry ? a.warranty_expiry.slice(0, 10) : null,
+            amc_vendor: a.amc_vendor || null,
+            amc_expiry: a.amc_expiry ? a.amc_expiry.slice(0, 10) : null,
+            manufacturer: a.manufacturer || null,
+            asset_count: 1,
+            last_used: a.created_at || new Date().toISOString(),
+          });
+        }
+      }
+      if (a.serial_number && a.serial_number.trim()) serialsSet.add(a.serial_number.trim().toUpperCase());
+      if (a.sap_asset_code && a.sap_asset_code.trim()) sapSet.add(a.sap_asset_code.trim().toUpperCase());
+      if (a.manufacturer && a.manufacturer.trim()) brandSet.add(a.manufacturer.trim().toUpperCase());
+      if (a.model && a.model.trim()) modelSet.add(a.model.trim().toUpperCase());
+      if (a.vendor_name && a.vendor_name.trim()) vendorSet.add(a.vendor_name.trim().toUpperCase());
+    }
+
+    return {
+      pos: Array.from(poMap.values()),
+      serials: Array.from(serialsSet),
+      sapCodes: Array.from(sapSet),
+      brands: Array.from(brandSet),
+      models: Array.from(modelSet),
+      vendors: Array.from(vendorSet),
+    };
+  }
+
+  // Real MySQL RDS Mode
+  try {
+    const pool = getPool();
+
+    // 1. POs with commercial metadata, count, and last used
+    const [poRows] = await pool.query<RowDataPacket[]>(
+      `SELECT 
+         po_number,
+         MAX(vendor_name) AS vendor_name,
+         MAX(invoice_number) AS invoice_number,
+         MAX(invoice_date) AS invoice_date,
+         MAX(purchase_date) AS purchase_date,
+         MAX(warranty_expiry) AS warranty_expiry,
+         MAX(amc_vendor) AS amc_vendor,
+         MAX(amc_expiry) AS amc_expiry,
+         MAX(manufacturer) AS manufacturer,
+         COUNT(*) AS asset_count,
+         MAX(created_at) AS last_used
+       FROM assets
+       WHERE po_number IS NOT NULL 
+         AND TRIM(po_number) != ''
+         AND is_deleted = 0
+         AND (created_at >= NOW() - INTERVAL 30 DAY OR updated_at >= NOW() - INTERVAL 30 DAY)
+       GROUP BY po_number
+       ORDER BY last_used DESC
+       LIMIT 100`
+    );
+
+    const pos: POSuggestionItem[] = (poRows as any[]).map((r) => ({
+      po_number: String(r.po_number || '').trim().toUpperCase(),
+      vendor_name: r.vendor_name ? String(r.vendor_name).trim().toUpperCase() : null,
+      invoice_number: r.invoice_number ? String(r.invoice_number).trim().toUpperCase() : null,
+      invoice_date: r.invoice_date ? String(r.invoice_date).slice(0, 10) : null,
+      purchase_date: r.purchase_date ? String(r.purchase_date).slice(0, 10) : null,
+      warranty_expiry: r.warranty_expiry ? String(r.warranty_expiry).slice(0, 10) : null,
+      amc_vendor: r.amc_vendor ? String(r.amc_vendor).trim().toUpperCase() : null,
+      amc_expiry: r.amc_expiry ? String(r.amc_expiry).slice(0, 10) : null,
+      manufacturer: r.manufacturer ? String(r.manufacturer).trim().toUpperCase() : null,
+      asset_count: Number(r.asset_count || 1),
+      last_used: r.last_used ? String(r.last_used) : new Date().toISOString(),
+    }));
+
+    // 2. Serials (Recent within 30 days)
+    const [serialRows] = await pool.query<RowDataPacket[]>(
+      `SELECT DISTINCT serial_number
+       FROM assets
+       WHERE serial_number IS NOT NULL 
+         AND TRIM(serial_number) != ''
+         AND is_deleted = 0
+         AND created_at >= NOW() - INTERVAL 30 DAY
+       ORDER BY created_at DESC
+       LIMIT 50`
+    );
+    const serials = (serialRows as any[])
+      .map((r) => String(r.serial_number || '').trim().toUpperCase())
+      .filter(Boolean);
+
+    // 3. SAP Codes (Recent within 30 days)
+    const [sapRows] = await pool.query<RowDataPacket[]>(
+      `SELECT DISTINCT sap_asset_code
+       FROM assets
+       WHERE sap_asset_code IS NOT NULL 
+         AND TRIM(sap_asset_code) != ''
+         AND is_deleted = 0
+         AND created_at >= NOW() - INTERVAL 30 DAY
+       ORDER BY created_at DESC
+       LIMIT 50`
+    );
+    const sapCodes = (sapRows as any[])
+      .map((r) => String(r.sap_asset_code || '').trim().toUpperCase())
+      .filter(Boolean);
+
+    // 4. Brands (Manufacturers within 30 days)
+    const [brandRows] = await pool.query<RowDataPacket[]>(
+      `SELECT DISTINCT manufacturer
+       FROM assets
+       WHERE manufacturer IS NOT NULL 
+         AND TRIM(manufacturer) != ''
+         AND is_deleted = 0
+         AND created_at >= NOW() - INTERVAL 30 DAY
+       ORDER BY manufacturer ASC
+       LIMIT 50`
+    );
+    const brands = (brandRows as any[])
+      .map((r) => String(r.manufacturer || '').trim().toUpperCase())
+      .filter(Boolean);
+
+    // 5. Models (within 30 days)
+    const [modelRows] = await pool.query<RowDataPacket[]>(
+      `SELECT DISTINCT model
+       FROM assets
+       WHERE model IS NOT NULL 
+         AND TRIM(model) != ''
+         AND is_deleted = 0
+         AND created_at >= NOW() - INTERVAL 30 DAY
+       ORDER BY model ASC
+       LIMIT 50`
+    );
+    const models = (modelRows as any[])
+      .map((r) => String(r.model || '').trim().toUpperCase())
+      .filter(Boolean);
+
+    // 6. Vendors (within 30 days)
+    const [vendorRows] = await pool.query<RowDataPacket[]>(
+      `SELECT DISTINCT vendor_name
+       FROM assets
+       WHERE vendor_name IS NOT NULL 
+         AND TRIM(vendor_name) != ''
+         AND is_deleted = 0
+         AND created_at >= NOW() - INTERVAL 30 DAY
+       ORDER BY vendor_name ASC
+       LIMIT 50`
+    );
+    const vendors = (vendorRows as any[])
+      .map((r) => String(r.vendor_name || '').trim().toUpperCase())
+      .filter(Boolean);
+
+    return { pos, serials, sapCodes, brands, models, vendors };
+  } catch (err) {
+    console.error('getAssetFormSuggestions failed:', err);
+    return { pos: [], serials: [], sapCodes: [], brands: [], models: [], vendors: [] };
+  }
 }
 
