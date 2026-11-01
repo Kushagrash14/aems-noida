@@ -654,14 +654,23 @@ function AssetWizardContent() {
   const saveExpiringPo = (po: POSuggestionItem) => {
     const clean = po.po_number.trim().toUpperCase();
     if (!clean) return;
-    setPoSuggestions((prev) => [po, ...prev.filter((x) => x.po_number.toUpperCase() !== clean)]);
+    let updatedPo: POSuggestionItem = { ...po, asset_count: po.asset_count ?? 0 };
+    setPoSuggestions((prev) => {
+      const existing = prev.find((x) => x.po_number.toUpperCase() === clean);
+      const targetCount = po.asset_count !== undefined ? po.asset_count : (existing?.asset_count ?? 0);
+      updatedPo = {
+        ...po,
+        asset_count: targetCount,
+      };
+      return [updatedPo, ...prev.filter((x) => x.po_number.toUpperCase() !== clean)];
+    });
     try {
       const raw = localStorage.getItem('aems_saved_pos_v1');
       let items: Array<POSuggestionItem> = [];
       if (raw) {
         try { items = JSON.parse(raw); } catch {}
       }
-      items = [po, ...items.filter((x) => x?.po_number && x.po_number.toUpperCase() !== clean)].slice(0, 50);
+      items = [updatedPo, ...items.filter((x) => x?.po_number && x.po_number.toUpperCase() !== clean)].slice(0, 50);
       localStorage.setItem('aems_saved_pos_v1', JSON.stringify(items));
     } catch {}
   };
@@ -720,14 +729,24 @@ function AssetWizardContent() {
         const data = await res.json();
         if (!isMounted) return;
 
-        if (Array.isArray(data.pos) && data.pos.length > 0) {
+        if (Array.isArray(data.pos)) {
           setPoSuggestions((prev) => {
             const map = new Map<string, POSuggestionItem>();
+            // 1. Central database POs with real registered count from MySQL
             data.pos.forEach((p: POSuggestionItem) => map.set(p.po_number.toUpperCase(), p));
+            // 2. Draft / locally saved POs that do not exist in database assets table have exactly 0 registered assets
             prev.forEach((p) => {
-              if (!map.has(p.po_number.toUpperCase())) map.set(p.po_number.toUpperCase(), p);
+              const key = p.po_number.toUpperCase();
+              if (!map.has(key)) {
+                map.set(key, { ...p, asset_count: 0 });
+              }
             });
-            return Array.from(map.values());
+            const reconciled = Array.from(map.values());
+            // Sanitize localStorage so any old stale counts are corrected to real counts
+            try {
+              localStorage.setItem('aems_saved_pos_v1', JSON.stringify(reconciled.slice(0, 50)));
+            } catch {}
+            return reconciled;
           });
         }
         if (Array.isArray(data.serials) && data.serials.length > 0) {
@@ -2703,8 +2722,11 @@ function AssetWizardContent() {
       if (serialNumber.trim()) saveExpiringSerial(serialNumber.trim());
       if (sapAssetCode.trim()) saveExpiringSap(sapAssetCode.trim());
       if (poNumber.trim()) {
+        const cleanPo = poNumber.trim().toUpperCase();
+        const existingPo = poSuggestions.find((p) => p.po_number.toUpperCase() === cleanPo);
+        const registeredCount = (existingPo?.asset_count || 0) + 1;
         saveExpiringPo({
-          po_number: poNumber.trim().toUpperCase(),
+          po_number: cleanPo,
           vendor_name: vendorName.trim().toUpperCase() || null,
           invoice_number: invoiceNumber.trim().toUpperCase() || null,
           invoice_date: invoiceDate || null,
@@ -2713,7 +2735,7 @@ function AssetWizardContent() {
           amc_vendor: amcVendor.trim().toUpperCase() || null,
           amc_expiry: amcExpiry || null,
           manufacturer: manufacturer.trim().toUpperCase() || null,
-          asset_count: 1,
+          asset_count: registeredCount,
           last_used: new Date().toISOString(),
         });
       }
@@ -2977,8 +2999,11 @@ function AssetWizardContent() {
       if (serialNumber.trim()) saveExpiringSerial(serialNumber.trim());
       if (sapAssetCode.trim()) saveExpiringSap(sapAssetCode.trim());
       if (poNumber.trim()) {
+        const cleanPo = poNumber.trim().toUpperCase();
+        const existingPo = poSuggestions.find((p) => p.po_number.toUpperCase() === cleanPo);
+        const registeredCount = (existingPo?.asset_count || 0) + 1;
         saveExpiringPo({
-          po_number: poNumber.trim().toUpperCase(),
+          po_number: cleanPo,
           vendor_name: vendorName.trim().toUpperCase() || null,
           invoice_number: invoiceNumber.trim().toUpperCase() || null,
           invoice_date: invoiceDate || null,
@@ -2987,7 +3012,7 @@ function AssetWizardContent() {
           amc_vendor: amcVendor.trim().toUpperCase() || null,
           amc_expiry: amcExpiry || null,
           manufacturer: manufacturer.trim().toUpperCase() || null,
-          asset_count: 1,
+          asset_count: registeredCount,
           last_used: new Date().toISOString(),
         });
       }
@@ -3809,7 +3834,7 @@ function AssetWizardContent() {
                           amc_vendor: amcVendor.trim().toUpperCase() || null,
                           amc_expiry: amcExpiry || null,
                           manufacturer: manufacturer.trim().toUpperCase() || null,
-                          asset_count: 1,
+                          asset_count: 0,
                           last_used: new Date().toISOString(),
                         });
                       }
@@ -3857,8 +3882,16 @@ function AssetWizardContent() {
                               <span className="font-mono text-blue-700 font-black group-hover:text-blue-800">
                                 {po.po_number}
                               </span>
-                              <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full border border-blue-200">
-                                {po.asset_count} Asset{po.asset_count === 1 ? '' : 's'} Registered
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                  (po.asset_count || 0) > 0
+                                    ? 'bg-blue-100 text-blue-800 border-blue-200'
+                                    : 'bg-slate-100 text-slate-600 border-slate-200'
+                                }`}
+                              >
+                                {(po.asset_count || 0) > 0
+                                  ? `${po.asset_count} Asset${po.asset_count === 1 ? '' : 's'} Registered`
+                                  : '0 Assets Registered'}
                               </span>
                             </div>
                             <div className="text-[11px] text-slate-500 truncate flex items-center gap-1.5 font-medium">
@@ -3887,7 +3920,7 @@ function AssetWizardContent() {
                               amc_vendor: amcVendor.trim().toUpperCase() || null,
                               amc_expiry: amcExpiry || null,
                               manufacturer: manufacturer.trim().toUpperCase() || null,
-                              asset_count: 1,
+                              asset_count: 0,
                               last_used: new Date().toISOString(),
                             });
                             setShowPoDropdown(false);
