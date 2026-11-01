@@ -2738,6 +2738,48 @@ export async function assignAssetToEmployee(params: {
     },
   });
 
+  // Cascade assignment to bundled child equipment if any
+  try {
+    if (env.isMockMode) {
+      const children = memory.assets.filter((a) => a.parent_asset_id === params.assetId && !a.is_deleted);
+      for (const child of children) {
+        child.assigned_employee_id = params.employeeId;
+        child.status = 'in_service';
+        child.updated_at = now;
+        await openAssignment({
+          assetId: child.id,
+          employeeId: params.employeeId,
+          assignedBy: params.assignedBy,
+          remarks: `Assigned as bundled equipment with ${data.name} (${data.asset_tag})`,
+          at: now,
+        });
+      }
+    } else {
+      const { data: children } = await db
+        .from('assets')
+        .select('id')
+        .eq('parent_asset_id', params.assetId)
+        .eq('is_deleted', false);
+      if (children && children.length > 0) {
+        for (const child of children) {
+          await db
+            .from('assets')
+            .update({ assigned_employee_id: params.employeeId, status: 'in_service', updated_at: now })
+            .eq('id', child.id);
+          await openAssignment({
+            assetId: child.id,
+            employeeId: params.employeeId,
+            assignedBy: params.assignedBy,
+            remarks: `Assigned as bundled equipment with ${data.name} (${data.asset_tag})`,
+            at: now,
+          });
+        }
+      }
+    }
+  } catch (childErr) {
+    console.warn('Failed to cascade assignment to bundled child assets:', childErr);
+  }
+
   invalidateAssetCache();
   return data as Asset;
 }
@@ -2913,6 +2955,46 @@ export async function deassignAssetFromEmployee(params: {
     },
   });
 
+  // Cascade return to stock for any bundled child equipment
+  try {
+    if (env.isMockMode) {
+      const children = memory.assets.filter((a) => a.parent_asset_id === params.assetId && !a.is_deleted);
+      for (const child of children) {
+        await closeOpenAssignments({
+          assetId: child.id,
+          at: now,
+          returnCondition: params.returnCondition || 'Good / Working',
+          remarks: `Returned to storage with parent ${asset.name}`,
+        });
+        child.assigned_employee_id = null;
+        child.status = 'in_storage';
+        child.updated_at = now;
+      }
+    } else {
+      const { data: children } = await db
+        .from('assets')
+        .select('id')
+        .eq('parent_asset_id', params.assetId)
+        .eq('is_deleted', false);
+      if (children && children.length > 0) {
+        for (const child of children) {
+          await closeOpenAssignments({
+            assetId: child.id,
+            at: now,
+            returnCondition: params.returnCondition || 'Good / Working',
+            remarks: `Returned to storage with parent ${asset.name}`,
+          });
+          await db
+            .from('assets')
+            .update({ assigned_employee_id: null, status: 'in_storage', updated_at: now })
+            .eq('id', child.id);
+        }
+      }
+    }
+  } catch (childErr) {
+    console.warn('Failed to cascade deassign bundled child assets:', childErr);
+  }
+
   invalidateAssetCache();
   return data as Asset;
 }
@@ -2923,6 +3005,21 @@ export async function softDeleteAsset(assetId: string, deletedBy: string): Promi
   const now = new Date().toISOString();
 
   await closeOpenAssignments({ assetId, at: now, remarks: 'Asset deleted from register' });
+
+  // Unlink any bundled child equipment before deleting parent
+  try {
+    if (env.isMockMode) {
+      memory.assets
+        .filter((a) => a.parent_asset_id === assetId)
+        .forEach((a) => {
+          a.parent_asset_id = null;
+        });
+    } else {
+      await db.from('assets').update({ parent_asset_id: null }).eq('parent_asset_id', assetId);
+    }
+  } catch (unlinkErr) {
+    console.warn('Failed to unlink child assets on delete:', unlinkErr);
+  }
 
   const deletion = {
     is_deleted: true,
