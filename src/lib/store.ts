@@ -4626,9 +4626,12 @@ function toSafeDateStr(val: any): string | null {
 export async function getAssetFormSuggestions(): Promise<AssetFormSuggestions> {
   if (env.isMockMode) {
     const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-    const recent = memory.assets.filter(
+    let recent = memory.assets.filter(
       (a) => !a.is_deleted && new Date(a.created_at || Date.now()).getTime() >= thirtyDaysAgo
     );
+    if (recent.length === 0) {
+      recent = memory.assets.filter((a) => !a.is_deleted);
+    }
 
     const poMap = new Map<string, POSuggestionItem>();
     const serialsSet = new Set<string>();
@@ -4689,7 +4692,7 @@ export async function getAssetFormSuggestions(): Promise<AssetFormSuggestions> {
     const pool = getPool();
 
     // 1. POs with commercial metadata, count, and last used
-    const [poRows] = await pool.query<RowDataPacket[]>(
+    let [poRows] = await pool.query<RowDataPacket[]>(
       `SELECT 
          po_number,
          MAX(vendor_name) AS vendor_name,
@@ -4712,6 +4715,31 @@ export async function getAssetFormSuggestions(): Promise<AssetFormSuggestions> {
        LIMIT 100`
     );
 
+    // Fallback to recent POs if no assets within 30 days
+    if (!poRows || poRows.length === 0) {
+      [poRows] = await pool.query<RowDataPacket[]>(
+        `SELECT 
+           po_number,
+           MAX(vendor_name) AS vendor_name,
+           MAX(invoice_number) AS invoice_number,
+           MAX(invoice_date) AS invoice_date,
+           MAX(purchase_date) AS purchase_date,
+           MAX(warranty_expiry) AS warranty_expiry,
+           MAX(amc_vendor) AS amc_vendor,
+           MAX(amc_expiry) AS amc_expiry,
+           MAX(manufacturer) AS manufacturer,
+           COUNT(*) AS asset_count,
+           MAX(created_at) AS last_used
+         FROM assets
+         WHERE po_number IS NOT NULL 
+           AND TRIM(po_number) != ''
+           AND is_deleted = 0
+         GROUP BY po_number
+         ORDER BY last_used DESC
+         LIMIT 50`
+      );
+    }
+
     const pos: POSuggestionItem[] = (poRows as any[]).map((r) => ({
       po_number: String(r.po_number || '').trim().toUpperCase(),
       vendor_name: r.vendor_name ? String(r.vendor_name).trim().toUpperCase() : null,
@@ -4726,8 +4754,8 @@ export async function getAssetFormSuggestions(): Promise<AssetFormSuggestions> {
       last_used: r.last_used ? String(r.last_used) : new Date().toISOString(),
     }));
 
-    // 2. Serials (Recent within 30 days)
-    const [serialRows] = await pool.query<RowDataPacket[]>(
+    // 2. Serials (Recent within 30 days, fallback to latest)
+    let [serialRows] = await pool.query<RowDataPacket[]>(
       `SELECT DISTINCT serial_number
        FROM assets
        WHERE serial_number IS NOT NULL 
@@ -4737,12 +4765,23 @@ export async function getAssetFormSuggestions(): Promise<AssetFormSuggestions> {
        ORDER BY created_at DESC
        LIMIT 50`
     );
+    if (!serialRows || serialRows.length === 0) {
+      [serialRows] = await pool.query<RowDataPacket[]>(
+        `SELECT DISTINCT serial_number
+         FROM assets
+         WHERE serial_number IS NOT NULL 
+           AND TRIM(serial_number) != ''
+           AND is_deleted = 0
+         ORDER BY created_at DESC
+         LIMIT 50`
+      );
+    }
     const serials = (serialRows as any[])
       .map((r) => String(r.serial_number || '').trim().toUpperCase())
       .filter(Boolean);
 
-    // 3. SAP Codes (Recent within 30 days)
-    const [sapRows] = await pool.query<RowDataPacket[]>(
+    // 3. SAP Codes (Recent within 30 days, fallback to latest)
+    let [sapRows] = await pool.query<RowDataPacket[]>(
       `SELECT DISTINCT sap_asset_code
        FROM assets
        WHERE sap_asset_code IS NOT NULL 
@@ -4752,12 +4791,23 @@ export async function getAssetFormSuggestions(): Promise<AssetFormSuggestions> {
        ORDER BY created_at DESC
        LIMIT 50`
     );
+    if (!sapRows || sapRows.length === 0) {
+      [sapRows] = await pool.query<RowDataPacket[]>(
+        `SELECT DISTINCT sap_asset_code
+         FROM assets
+         WHERE sap_asset_code IS NOT NULL 
+           AND TRIM(sap_asset_code) != ''
+           AND is_deleted = 0
+         ORDER BY created_at DESC
+         LIMIT 50`
+      );
+    }
     const sapCodes = (sapRows as any[])
       .map((r) => String(r.sap_asset_code || '').trim().toUpperCase())
       .filter(Boolean);
 
-    // 4. Brands (Manufacturers within 30 days)
-    const [brandRows] = await pool.query<RowDataPacket[]>(
+    // 4. Brands (Manufacturers within 30 days, fallback to latest)
+    let [brandRows] = await pool.query<RowDataPacket[]>(
       `SELECT DISTINCT manufacturer
        FROM assets
        WHERE manufacturer IS NOT NULL 
@@ -4767,12 +4817,23 @@ export async function getAssetFormSuggestions(): Promise<AssetFormSuggestions> {
        ORDER BY manufacturer ASC
        LIMIT 50`
     );
+    if (!brandRows || brandRows.length === 0) {
+      [brandRows] = await pool.query<RowDataPacket[]>(
+        `SELECT DISTINCT manufacturer
+         FROM assets
+         WHERE manufacturer IS NOT NULL 
+           AND TRIM(manufacturer) != ''
+           AND is_deleted = 0
+         ORDER BY manufacturer ASC
+         LIMIT 50`
+      );
+    }
     const brands = (brandRows as any[])
       .map((r) => String(r.manufacturer || '').trim().toUpperCase())
       .filter(Boolean);
 
-    // 5. Models (within 30 days)
-    const [modelRows] = await pool.query<RowDataPacket[]>(
+    // 5. Models (within 30 days, fallback to latest)
+    let [modelRows] = await pool.query<RowDataPacket[]>(
       `SELECT DISTINCT model
        FROM assets
        WHERE model IS NOT NULL 
@@ -4782,12 +4843,23 @@ export async function getAssetFormSuggestions(): Promise<AssetFormSuggestions> {
        ORDER BY model ASC
        LIMIT 50`
     );
+    if (!modelRows || modelRows.length === 0) {
+      [modelRows] = await pool.query<RowDataPacket[]>(
+        `SELECT DISTINCT model
+         FROM assets
+         WHERE model IS NOT NULL 
+           AND TRIM(model) != ''
+           AND is_deleted = 0
+         ORDER BY model ASC
+         LIMIT 50`
+      );
+    }
     const models = (modelRows as any[])
       .map((r) => String(r.model || '').trim().toUpperCase())
       .filter(Boolean);
 
-    // 6. Vendors (within 30 days)
-    const [vendorRows] = await pool.query<RowDataPacket[]>(
+    // 6. Vendors (within 30 days, fallback to latest)
+    let [vendorRows] = await pool.query<RowDataPacket[]>(
       `SELECT DISTINCT vendor_name
        FROM assets
        WHERE vendor_name IS NOT NULL 
@@ -4797,6 +4869,17 @@ export async function getAssetFormSuggestions(): Promise<AssetFormSuggestions> {
        ORDER BY vendor_name ASC
        LIMIT 50`
     );
+    if (!vendorRows || vendorRows.length === 0) {
+      [vendorRows] = await pool.query<RowDataPacket[]>(
+        `SELECT DISTINCT vendor_name
+         FROM assets
+         WHERE vendor_name IS NOT NULL 
+           AND TRIM(vendor_name) != ''
+           AND is_deleted = 0
+         ORDER BY vendor_name ASC
+         LIMIT 50`
+      );
+    }
     const vendors = (vendorRows as any[])
       .map((r) => String(r.vendor_name || '').trim().toUpperCase())
       .filter(Boolean);

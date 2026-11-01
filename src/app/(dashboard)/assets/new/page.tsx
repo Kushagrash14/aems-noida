@@ -591,9 +591,101 @@ function AssetWizardContent() {
     setOptionsDept(optionDeptKey);
   }, [optionDeptKey, isItOptionDept]);
 
-  // Load Central Suggestions from MySQL Database (Syncs across all LAN PCs)
+  // Save expiring serial to local storage with 30-day timestamp
+  const saveExpiringSerial = (s: string) => {
+    const clean = s.trim().toUpperCase();
+    if (!clean) return;
+    setSerialSuggestions((prev) => [clean, ...prev.filter((x) => x !== clean)]);
+    try {
+      const raw = localStorage.getItem('aems_saved_serials_v1');
+      let items: Array<{ value: string; lastUsed: number }> = [];
+      if (raw) {
+        try { items = JSON.parse(raw); } catch {}
+      }
+      items = [{ value: clean, lastUsed: Date.now() }, ...items.filter((x) => (typeof x === 'string' ? x !== clean : x?.value !== clean))].slice(0, 50);
+      localStorage.setItem('aems_saved_serials_v1', JSON.stringify(items));
+    } catch {}
+  };
+
+  // Save expiring SAP code to local storage with 30-day timestamp
+  const saveExpiringSap = (c: string) => {
+    const clean = c.trim().toUpperCase();
+    if (!clean) return;
+    setSapSuggestions((prev) => [clean, ...prev.filter((x) => x !== clean)]);
+    try {
+      const raw = localStorage.getItem('aems_saved_sap_codes_v1');
+      let items: Array<{ value: string; lastUsed: number }> = [];
+      if (raw) {
+        try { items = JSON.parse(raw); } catch {}
+      }
+      items = [{ value: clean, lastUsed: Date.now() }, ...items.filter((x) => (typeof x === 'string' ? x !== clean : x?.value !== clean))].slice(0, 50);
+      localStorage.setItem('aems_saved_sap_codes_v1', JSON.stringify(items));
+    } catch {}
+  };
+
+  // Save expiring PO to local storage with 30-day timestamp
+  const saveExpiringPo = (po: POSuggestionItem) => {
+    const clean = po.po_number.trim().toUpperCase();
+    if (!clean) return;
+    setPoSuggestions((prev) => [po, ...prev.filter((x) => x.po_number !== clean)]);
+    try {
+      const raw = localStorage.getItem('aems_saved_pos_v1');
+      let items: Array<POSuggestionItem> = [];
+      if (raw) {
+        try { items = JSON.parse(raw); } catch {}
+      }
+      items = [po, ...items.filter((x) => x?.po_number !== clean)].slice(0, 50);
+      localStorage.setItem('aems_saved_pos_v1', JSON.stringify(items));
+    } catch {}
+  };
+
+  // Load Central Suggestions from MySQL Database + Local Cache (Syncs across all LAN PCs)
   useEffect(() => {
     let isMounted = true;
+    const now = Date.now();
+    const TTL_30_DAYS = 30 * 24 * 60 * 60 * 1000;
+
+    // 1. Initial immediate load from local cache
+    try {
+      const rawSer = localStorage.getItem('aems_saved_serials_v1');
+      if (rawSer) {
+        const parsed: any[] = JSON.parse(rawSer);
+        if (Array.isArray(parsed)) {
+          const valid = parsed
+            .filter((x) => typeof x === 'string' || (x?.lastUsed && now - x.lastUsed <= TTL_30_DAYS))
+            .map((x) => (typeof x === 'string' ? x : x.value));
+          setSerialSuggestions((prev) => Array.from(new Set([...prev, ...valid])));
+        }
+      }
+
+      const rawSap = localStorage.getItem('aems_saved_sap_codes_v1');
+      if (rawSap) {
+        const parsed: any[] = JSON.parse(rawSap);
+        if (Array.isArray(parsed)) {
+          const valid = parsed
+            .filter((x) => typeof x === 'string' || (x?.lastUsed && now - x.lastUsed <= TTL_30_DAYS))
+            .map((x) => (typeof x === 'string' ? x : x.value));
+          setSapSuggestions((prev) => Array.from(new Set([...prev, ...valid])));
+        }
+      }
+
+      const rawPo = localStorage.getItem('aems_saved_pos_v1');
+      if (rawPo) {
+        const parsed: any[] = JSON.parse(rawPo);
+        if (Array.isArray(parsed)) {
+          const valid = parsed.filter(
+            (x) => x?.po_number && (!x.last_used || now - new Date(x.last_used).getTime() <= TTL_30_DAYS)
+          );
+          setPoSuggestions((prev) => {
+            const seen = new Set(prev.map((p) => p.po_number.toUpperCase()));
+            const toAdd = valid.filter((p) => !seen.has(p.po_number.toUpperCase()));
+            return [...prev, ...toAdd];
+          });
+        }
+      }
+    } catch {}
+
+    // 2. Fetch central suggestions from MySQL Database
     async function loadCentralSuggestions() {
       try {
         const res = await fetch('/api/assets/suggestions');
@@ -601,9 +693,22 @@ function AssetWizardContent() {
         const data = await res.json();
         if (!isMounted) return;
 
-        if (Array.isArray(data.pos)) setPoSuggestions(data.pos);
-        if (Array.isArray(data.serials)) setSerialSuggestions(data.serials);
-        if (Array.isArray(data.sapCodes)) setSapSuggestions(data.sapCodes);
+        if (Array.isArray(data.pos) && data.pos.length > 0) {
+          setPoSuggestions((prev) => {
+            const map = new Map<string, POSuggestionItem>();
+            data.pos.forEach((p: POSuggestionItem) => map.set(p.po_number.toUpperCase(), p));
+            prev.forEach((p) => {
+              if (!map.has(p.po_number.toUpperCase())) map.set(p.po_number.toUpperCase(), p);
+            });
+            return Array.from(map.values());
+          });
+        }
+        if (Array.isArray(data.serials) && data.serials.length > 0) {
+          setSerialSuggestions((prev) => Array.from(new Set([...data.serials, ...prev])));
+        }
+        if (Array.isArray(data.sapCodes) && data.sapCodes.length > 0) {
+          setSapSuggestions((prev) => Array.from(new Set([...data.sapCodes, ...prev])));
+        }
 
         // Merge active 30-day brands, models, and vendors into current department dropdowns
         if (Array.isArray(data.brands) && data.brands.length > 0) {
@@ -620,6 +725,7 @@ function AssetWizardContent() {
       }
     }
     loadCentralSuggestions();
+
     return () => {
       isMounted = false;
     };
@@ -2577,6 +2683,25 @@ function AssetWizardContent() {
         }
       }
 
+      // Auto-save Serial, SAP Code, and PO to 30-day suggestions dropdown
+      if (serialNumber.trim()) saveExpiringSerial(serialNumber.trim());
+      if (sapAssetCode.trim()) saveExpiringSap(sapAssetCode.trim());
+      if (poNumber.trim()) {
+        saveExpiringPo({
+          po_number: poNumber.trim().toUpperCase(),
+          vendor_name: vendorName.trim().toUpperCase() || null,
+          invoice_number: invoiceNumber.trim().toUpperCase() || null,
+          invoice_date: invoiceDate || null,
+          purchase_date: purchaseDate || null,
+          warranty_expiry: warrantyExpiry || null,
+          amc_vendor: amcVendor.trim().toUpperCase() || null,
+          amc_expiry: amcExpiry || null,
+          manufacturer: manufacturer.trim().toUpperCase() || null,
+          asset_count: 1,
+          last_used: new Date().toISOString(),
+        });
+      }
+
       if (isDamagedMode) {
         setSuccessToast(`Damaged/Scrap asset registered! Reflected in Damaged Module. Tag: ${data.asset.asset_tag}`);
         setTimeout(() => router.push('/damaged-scrap'), 1500);
@@ -2830,6 +2955,25 @@ function AssetWizardContent() {
         } catch (err) {
           console.error('Error clearing draft:', err);
         }
+      }
+
+      // Auto-save Serial, SAP Code, and PO to 30-day suggestions dropdown
+      if (serialNumber.trim()) saveExpiringSerial(serialNumber.trim());
+      if (sapAssetCode.trim()) saveExpiringSap(sapAssetCode.trim());
+      if (poNumber.trim()) {
+        saveExpiringPo({
+          po_number: poNumber.trim().toUpperCase(),
+          vendor_name: vendorName.trim().toUpperCase() || null,
+          invoice_number: invoiceNumber.trim().toUpperCase() || null,
+          invoice_date: invoiceDate || null,
+          purchase_date: purchaseDate || null,
+          warranty_expiry: warrantyExpiry || null,
+          amc_vendor: amcVendor.trim().toUpperCase() || null,
+          amc_expiry: amcExpiry || null,
+          manufacturer: manufacturer.trim().toUpperCase() || null,
+          asset_count: 1,
+          last_used: new Date().toISOString(),
+        });
       }
 
       const hodNote = data.hodMail
@@ -3350,15 +3494,20 @@ function AssetWizardContent() {
                     </span>
                   ) : null}
                 </div>
-                <div className="relative">
+                <div className="relative flex items-center">
                   <input
                     type="text"
                     value={serialNumber}
                     onChange={handleCapsChange(setSerialNumber)}
                     onFocus={() => setShowSerialDropdown(true)}
-                    onBlur={() => setTimeout(() => setShowSerialDropdown(false), 250)}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        setShowSerialDropdown(false);
+                        if (serialNumber.trim()) saveExpiringSerial(serialNumber.trim());
+                      }, 250);
+                    }}
                     placeholder="e.g. SN-981249A"
-                    className={`w-full border rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none uppercase transition-colors ${
+                    className={`w-full border rounded-xl px-3 py-2 pr-8 text-xs font-mono text-slate-900 focus:outline-none uppercase transition-colors shadow-2xs ${
                       serialError
                         ? 'bg-rose-50 border-rose-400 focus:border-rose-600'
                         : serialValid
@@ -3366,27 +3515,60 @@ function AssetWizardContent() {
                         : 'bg-slate-50 border-slate-200 focus:border-blue-500 focus:bg-white'
                     }`}
                   />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setShowSerialDropdown(!showSerialDropdown)}
+                    className="absolute right-2 text-slate-400 hover:text-slate-700 p-1 cursor-pointer transition-transform"
+                    title="Toggle recent serial numbers"
+                  >
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 transition-transform duration-150 ${
+                        showSerialDropdown ? 'rotate-180 text-blue-600' : ''
+                      }`}
+                    />
+                  </button>
+
                   {/* Serial Number Suggestions Dropdown */}
-                  {showSerialDropdown && filteredSerialSuggestions.length > 0 && (
-                    <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto divide-y divide-slate-100 animate-in fade-in slide-in-from-top-1 duration-150">
+                  {showSerialDropdown && (
+                    <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden max-h-52 overflow-y-auto divide-y divide-slate-100 animate-in fade-in slide-in-from-top-1 duration-150">
                       <div className="px-2.5 py-1.5 bg-slate-50 border-b border-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
-                        <span>Recent Serials (30-Day History)</span>
+                        <span>Recent Serials ({filteredSerialSuggestions.length})</span>
                         <span className="text-[9px] text-blue-600 font-normal">Click to reuse</span>
                       </div>
-                      {filteredSerialSuggestions.map((s) => (
+                      {filteredSerialSuggestions.length > 0 ? (
+                        filteredSerialSuggestions.map((s) => (
+                          <div
+                            key={s}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setSerialNumber(s);
+                              setShowSerialDropdown(false);
+                            }}
+                            className="px-3 py-1.5 text-xs font-mono text-slate-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer flex items-center justify-between transition-colors"
+                          >
+                            <span className="font-semibold">{s}</span>
+                            <span className="text-[10px] text-slate-400 font-sans">Recent</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2.5 text-center text-xs text-slate-400">
+                          No recent serials yet. Type above to auto-save.
+                        </div>
+                      )}
+                      {serialNumber.trim() && !serialSuggestions.includes(serialNumber.trim().toUpperCase()) && (
                         <div
-                          key={s}
                           onMouseDown={(e) => {
                             e.preventDefault();
-                            setSerialNumber(s);
+                            saveExpiringSerial(serialNumber.trim());
                             setShowSerialDropdown(false);
                           }}
-                          className="px-3 py-1.5 text-xs font-mono text-slate-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer flex items-center justify-between transition-colors"
+                          className="px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 cursor-pointer flex items-center gap-1.5 border-t border-slate-100"
                         >
-                          <span className="font-semibold">{s}</span>
-                          <span className="text-[10px] text-slate-400 font-sans">Recent</span>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Save &quot;{serialNumber.trim().toUpperCase()}&quot; to Dropdown (30 Days)</span>
                         </div>
-                      ))}
+                      )}
                     </div>
                   )}
                 </div>
@@ -3402,42 +3584,80 @@ function AssetWizardContent() {
                 <label className="block text-xs font-semibold text-slate-600 mb-1">
                   Asset Code (According to SAP) <span className="text-rose-500 font-bold">*</span>
                 </label>
-                <div className="relative">
+                <div className="relative flex items-center">
                   <input
                     type="text"
                     required
                     value={sapAssetCode}
                     onChange={handleCapsChange(setSapAssetCode)}
                     onFocus={() => setShowSapDropdown(true)}
-                    onBlur={() => setTimeout(() => setShowSapDropdown(false), 250)}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        setShowSapDropdown(false);
+                        if (sapAssetCode.trim()) saveExpiringSap(sapAssetCode.trim());
+                      }, 250);
+                    }}
                     placeholder="e.g. SAP-1002394"
-                    className={`w-full border rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none uppercase transition-colors ${
+                    className={`w-full border rounded-xl px-3 py-2 pr-8 text-xs font-mono text-slate-900 focus:outline-none uppercase transition-colors shadow-2xs ${
                       !sapAssetCode.trim()
                         ? 'bg-amber-50/40 border-amber-300 focus:border-amber-500 focus:bg-white'
                         : 'bg-slate-50 border-slate-200 focus:border-blue-500 focus:bg-white'
                     }`}
                   />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setShowSapDropdown(!showSapDropdown)}
+                    className="absolute right-2 text-slate-400 hover:text-slate-700 p-1 cursor-pointer transition-transform"
+                    title="Toggle recent SAP codes"
+                  >
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 transition-transform duration-150 ${
+                        showSapDropdown ? 'rotate-180 text-blue-600' : ''
+                      }`}
+                    />
+                  </button>
+
                   {/* SAP Code Suggestions Dropdown */}
-                  {showSapDropdown && filteredSapSuggestions.length > 0 && (
-                    <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto divide-y divide-slate-100 animate-in fade-in slide-in-from-top-1 duration-150">
+                  {showSapDropdown && (
+                    <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden max-h-52 overflow-y-auto divide-y divide-slate-100 animate-in fade-in slide-in-from-top-1 duration-150">
                       <div className="px-2.5 py-1.5 bg-slate-50 border-b border-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
-                        <span>Recent SAP Codes (30-Day History)</span>
+                        <span>Recent SAP Codes ({filteredSapSuggestions.length})</span>
                         <span className="text-[9px] text-blue-600 font-normal">Click to reuse</span>
                       </div>
-                      {filteredSapSuggestions.map((c) => (
+                      {filteredSapSuggestions.length > 0 ? (
+                        filteredSapSuggestions.map((c) => (
+                          <div
+                            key={c}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setSapAssetCode(c);
+                              setShowSapDropdown(false);
+                            }}
+                            className="px-3 py-1.5 text-xs font-mono text-slate-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer flex items-center justify-between transition-colors"
+                          >
+                            <span className="font-semibold">{c}</span>
+                            <span className="text-[10px] text-slate-400 font-sans">Recent</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2.5 text-center text-xs text-slate-400">
+                          No recent SAP codes yet. Type above to auto-save.
+                        </div>
+                      )}
+                      {sapAssetCode.trim() && !sapSuggestions.includes(sapAssetCode.trim().toUpperCase()) && (
                         <div
-                          key={c}
                           onMouseDown={(e) => {
                             e.preventDefault();
-                            setSapAssetCode(c);
+                            saveExpiringSap(sapAssetCode.trim());
                             setShowSapDropdown(false);
                           }}
-                          className="px-3 py-1.5 text-xs font-mono text-slate-700 hover:bg-blue-50 hover:text-blue-700 cursor-pointer flex items-center justify-between transition-colors"
+                          className="px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 cursor-pointer flex items-center gap-1.5 border-t border-slate-100"
                         >
-                          <span className="font-semibold">{c}</span>
-                          <span className="text-[10px] text-slate-400 font-sans">Recent</span>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Save &quot;{sapAssetCode.trim().toUpperCase()}&quot; to Dropdown (30 Days)</span>
                         </div>
-                      ))}
+                      )}
                     </div>
                   )}
                 </div>
@@ -3553,52 +3773,121 @@ function AssetWizardContent() {
                     </button>
                   )}
                 </div>
-                <div className="relative">
+                <div className="relative flex items-center">
                   <input
                     type="text"
                     required={condition === 'new_purchase'}
                     value={poNumber}
                     onChange={handleCapsChange(setPoNumber)}
                     onFocus={() => setShowPoDropdown(true)}
-                    onBlur={handlePoBlur}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        setShowPoDropdown(false);
+                        const trimmed = poNumber.trim().toUpperCase();
+                        if (!trimmed) return;
+                        const matched = poSuggestions.find((p) => p.po_number.toUpperCase() === trimmed);
+                        if (matched && (!vendorName.trim() || !purchaseDate || !warrantyExpiry)) {
+                          handleSelectPO(matched);
+                        } else if (!matched && condition === 'new_purchase') {
+                          saveExpiringPo({
+                            po_number: trimmed,
+                            vendor_name: vendorName.trim().toUpperCase() || null,
+                            invoice_number: invoiceNumber.trim().toUpperCase() || null,
+                            invoice_date: invoiceDate || null,
+                            purchase_date: purchaseDate || null,
+                            warranty_expiry: warrantyExpiry || null,
+                            amc_vendor: amcVendor.trim().toUpperCase() || null,
+                            amc_expiry: amcExpiry || null,
+                            manufacturer: manufacturer.trim().toUpperCase() || null,
+                            asset_count: 1,
+                            last_used: new Date().toISOString(),
+                          });
+                        }
+                      }, 250);
+                    }}
                     placeholder={condition === 'new_purchase' ? 'PO-2024-XXXX (Mandatory)' : 'PO-2024-XXXX (Optional)'}
-                    className={`w-full border rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none uppercase ${
+                    className={`w-full border rounded-xl px-3 py-2 pr-8 text-xs font-mono text-slate-900 focus:outline-none uppercase shadow-2xs ${
                       condition === 'new_purchase' && !poNumber.trim()
                         ? 'bg-amber-50/50 border-amber-300 focus:border-amber-500'
                         : 'bg-slate-50 border-slate-200 focus:border-blue-500 focus:bg-white'
                     }`}
                   />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setShowPoDropdown(!showPoDropdown)}
+                    className="absolute right-2 text-slate-400 hover:text-slate-700 p-1 cursor-pointer transition-transform"
+                    title="Toggle recent PO numbers"
+                  >
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 transition-transform duration-150 ${
+                        showPoDropdown ? 'rotate-180 text-blue-600' : ''
+                      }`}
+                    />
+                  </button>
+
                   {/* PO Suggestions Dropdown with Asset Count Badge & Vendor Info */}
-                  {showPoDropdown && filteredPoSuggestions.length > 0 && (
+                  {showPoDropdown && (
                     <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-blue-200 rounded-xl shadow-xl overflow-hidden max-h-56 overflow-y-auto divide-y divide-slate-100 animate-in fade-in slide-in-from-top-1 duration-150">
                       <div className="px-3 py-1.5 bg-blue-50/70 border-b border-blue-100 flex items-center justify-between text-[10px] font-bold text-blue-900 uppercase tracking-wider">
-                        <span>Active POs (Last 30 Days)</span>
-                        <span className="text-blue-600">{filteredPoSuggestions.length} Found</span>
+                        <span>Active POs ({filteredPoSuggestions.length})</span>
+                        <span className="text-blue-600">30-Day History</span>
                       </div>
-                      {filteredPoSuggestions.map((po) => (
+                      {filteredPoSuggestions.length > 0 ? (
+                        filteredPoSuggestions.map((po) => (
+                          <div
+                            key={po.po_number}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              handleSelectPO(po);
+                            }}
+                            className="px-3 py-2 text-xs hover:bg-blue-50 cursor-pointer flex flex-col gap-0.5 transition-colors group"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono text-blue-700 font-black group-hover:text-blue-800">
+                                {po.po_number}
+                              </span>
+                              <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full border border-blue-200">
+                                {po.asset_count} Asset{po.asset_count === 1 ? '' : 's'} Registered
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-500 truncate flex items-center gap-1.5 font-medium">
+                              <span className="text-slate-700 font-semibold">{po.vendor_name || 'Vendor N/A'}</span>
+                              {po.invoice_number && <span>• Inv: {po.invoice_number}</span>}
+                              {po.warranty_expiry && <span>• Warranty: {po.warranty_expiry}</span>}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2.5 text-center text-xs text-slate-400">
+                          No recent PO numbers yet. Type above to auto-save.
+                        </div>
+                      )}
+                      {poNumber.trim() && !poSuggestions.some((p) => p.po_number.toUpperCase() === poNumber.trim().toUpperCase()) && (
                         <div
-                          key={po.po_number}
                           onMouseDown={(e) => {
                             e.preventDefault();
-                            handleSelectPO(po);
+                            saveExpiringPo({
+                              po_number: poNumber.trim().toUpperCase(),
+                              vendor_name: vendorName.trim().toUpperCase() || null,
+                              invoice_number: invoiceNumber.trim().toUpperCase() || null,
+                              invoice_date: invoiceDate || null,
+                              purchase_date: purchaseDate || null,
+                              warranty_expiry: warrantyExpiry || null,
+                              amc_vendor: amcVendor.trim().toUpperCase() || null,
+                              amc_expiry: amcExpiry || null,
+                              manufacturer: manufacturer.trim().toUpperCase() || null,
+                              asset_count: 1,
+                              last_used: new Date().toISOString(),
+                            });
+                            setShowPoDropdown(false);
                           }}
-                          className="px-3 py-2 text-xs hover:bg-blue-50 cursor-pointer flex flex-col gap-0.5 transition-colors group"
+                          className="px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 cursor-pointer flex items-center gap-1.5 border-t border-slate-100"
                         >
-                          <div className="flex items-center justify-between">
-                            <span className="font-mono text-blue-700 font-black group-hover:text-blue-800">
-                              {po.po_number}
-                            </span>
-                            <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full border border-blue-200">
-                              {po.asset_count} Asset{po.asset_count === 1 ? '' : 's'} Registered
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-slate-500 truncate flex items-center gap-1.5 font-medium">
-                            <span className="text-slate-700 font-semibold">{po.vendor_name || 'Vendor N/A'}</span>
-                            {po.invoice_number && <span>• Inv: {po.invoice_number}</span>}
-                            {po.warranty_expiry && <span>• Warranty: {po.warranty_expiry}</span>}
-                          </div>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Save &quot;{poNumber.trim().toUpperCase()}&quot; to Dropdown (30 Days)</span>
                         </div>
-                      ))}
+                      )}
                     </div>
                   )}
                 </div>
