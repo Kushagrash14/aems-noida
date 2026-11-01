@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Category, CategoryFormField, FieldType, Location, Plant, Department, Employee, User } from '@/types/database';
+import { Asset, Category, CategoryFormField, FieldType, Location, Plant, Department, Employee, User } from '@/types/database';
 import { canUserManageEmployees } from '@/lib/permissions';
 import SearchableCombobox from '@/components/ui/SearchableCombobox';
 import { getAssetPreviewImage } from '@/lib/assetVisuals';
@@ -36,6 +36,10 @@ import {
   Server,
   Mail,
   Lock,
+  Package,
+  Warehouse,
+  ChevronDown,
+  RefreshCw,
 } from 'lucide-react';
 
 const SEED_LOCATIONS: Location[] = [
@@ -205,6 +209,20 @@ interface DraftData {
   assetImages: string[];
   attachedDocs: Array<{ name: string; size: string }>;
   peripherals: Array<{ peripheral_name: string; model_number: string; serial_number: string; is_included: boolean; notes: string }>;
+  bundledEquipment?: BundledItemRow[];
+}
+
+export interface BundledItemRow {
+  id: string;
+  category_id: string;
+  category_name: string;
+  source: 'new' | 'existing';
+  manufacturer: string;
+  model: string;
+  serial_number: string;
+  existing_asset_id: string;
+  notes: string;
+  serialError?: string;
 }
 
 function formatMacAddress(input: string): string {
@@ -423,6 +441,17 @@ function AssetWizardContent() {
   const [peripherals, setPeripherals] = useState<
     Array<{ peripheral_name: string; model_number: string; serial_number: string; is_included: boolean; notes: string }>
   >([]);
+
+  // Bundled Independent Equipment Assets (Keyboard, Mouse, UPS, Scanner, CPU, Bag, etc.)
+  const [bundledEquipment, setBundledEquipment] = useState<BundledItemRow[]>([]);
+  const [stockAssetsByCategory, setStockAssetsByCategory] = useState<Record<string, Asset[]>>({});
+  const [loadingStockCategory, setLoadingStockCategory] = useState<string | null>(null);
+
+  // Inline Category Creation Modal State
+  const [showNewCatModal, setShowNewCatModal] = useState(false);
+  const [newCatModalTargetRowId, setNewCatModalTargetRowId] = useState<string | null>(null);
+  const [inlineCatName, setInlineCatName] = useState('');
+  const [creatingInlineCat, setCreatingInlineCat] = useState(false);
 
   // Searchable Combobox Options States (Persistent with Add & Delete)
   const [brands, setBrands] = useState<string[]>([]);
@@ -1002,14 +1031,24 @@ function AssetWizardContent() {
     if (deptAutoSyncKeyRef.current === syncKey) return;
     deptAutoSyncKeyRef.current = syncKey;
 
-    // Non-IT Admins initial sync:
-    if (currentUser && currentUser.role !== 'it_admin') {
-      const userAllowedPlts = currentUser.scope?.plant_ids && currentUser.scope.plant_ids.length > 0
-        ? plants.filter((p) => currentUser.scope!.plant_ids!.includes(p.id))
-        : currentUser.plant_id
-        ? plants.filter((p) => p.id === currentUser.plant_id)
-        : plants;
+    const urlPlt = searchParams.get('plantId');
+    const userAllowedPlts = !currentUser || currentUser.role === 'it_admin'
+      ? plants
+      : currentUser.scope?.plant_ids && currentUser.scope.plant_ids.length > 0
+      ? plants.filter((p) => currentUser.scope!.plant_ids!.includes(p.id))
+      : currentUser.plant_id
+      ? plants.filter((p) => p.id === currentUser.plant_id)
+      : plants;
 
+    if (urlPlt && userAllowedPlts.some((p) => p.id === urlPlt)) {
+      setPlantId(urlPlt);
+      setNewEmpPlantId(urlPlt);
+      const foundPlt = plants.find((p) => p.id === urlPlt);
+      if (foundPlt?.location_id) {
+        setLocationId(foundPlt.location_id);
+        setNewEmpLocationId(foundPlt.location_id);
+      }
+    } else if (currentUser && currentUser.role !== 'it_admin') {
       // Only default if plantId is empty or not in allowed list
       if (!plantId || (userAllowedPlts.length > 0 && !userAllowedPlts.some((p) => p.id === plantId))) {
         const defaultPltId = userAllowedPlts[0]?.id || currentUser.plant_id;
@@ -1706,6 +1745,106 @@ function AssetWizardContent() {
     setPeripherals((prev) => prev.filter((_, i) => i !== index));
   };
 
+  // Bundled Independent Equipment Handlers
+  const fetchStockAssetsForCategory = async (catId: string) => {
+    if (!catId || stockAssetsByCategory[catId]) return;
+    setLoadingStockCategory(catId);
+    try {
+      const res = await fetch(`/api/assets?categoryId=${encodeURIComponent(catId)}&status=in_storage`);
+      if (res.ok) {
+        const data = await res.json();
+        setStockAssetsByCategory((prev) => ({ ...prev, [catId]: data.assets || [] }));
+      }
+    } catch (e) {
+      console.warn('Failed to fetch in-stock assets for category', e);
+    } finally {
+      setLoadingStockCategory(null);
+    }
+  };
+
+  const handleAddBundledItem = () => {
+    const mouseCat = categories.find((c) => c.name.toUpperCase().includes('MOUSE'));
+    const kbdCat = categories.find((c) => c.name.toUpperCase().includes('KEYBOARD'));
+    const defaultCat = mouseCat || kbdCat || categories[0];
+
+    const newRowId = crypto.randomUUID();
+    const newRow: BundledItemRow = {
+      id: newRowId,
+      category_id: defaultCat?.id || '',
+      category_name: defaultCat?.name || '',
+      source: 'new',
+      manufacturer: '',
+      model: '',
+      serial_number: '',
+      existing_asset_id: '',
+      notes: '',
+    };
+    setBundledEquipment((prev) => [...prev, newRow]);
+  };
+
+  const handleRemoveBundledItem = (id: string) => {
+    setBundledEquipment((prev) => prev.filter((b) => b.id !== id));
+  };
+
+  const handleUpdateBundledItem = (id: string, updates: Partial<BundledItemRow>) => {
+    setBundledEquipment((prev) =>
+      prev.map((b) => {
+        if (b.id !== id) return b;
+        const updated = { ...b, ...updates };
+        if (updates.category_id && updates.category_id !== b.category_id) {
+          const cat = categories.find((c) => c.id === updates.category_id);
+          if (cat) updated.category_name = cat.name;
+          updated.existing_asset_id = '';
+          if (updated.source === 'existing' && updates.category_id) {
+            fetchStockAssetsForCategory(updates.category_id);
+          }
+        }
+        if (updates.source === 'existing' && updated.category_id) {
+          fetchStockAssetsForCategory(updated.category_id);
+        }
+        return updated;
+      })
+    );
+  };
+
+  const handleSaveInlineCategory = async () => {
+    if (!inlineCatName.trim()) return;
+    setCreatingInlineCat(true);
+    try {
+      const cleanName = inlineCatName.trim().toUpperCase();
+      const res = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: cleanName,
+          code: `CAT-${cleanName.slice(0, 4).replace(/[^A-Z]/g, '') || 'GEN'}`,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create category');
+
+      const createdCat: Category = data.category;
+      setCategories((prev) => [...prev, createdCat]);
+
+      if (newCatModalTargetRowId) {
+        handleUpdateBundledItem(newCatModalTargetRowId, {
+          category_id: createdCat.id,
+          category_name: createdCat.name,
+        });
+      }
+
+      setShowNewCatModal(false);
+      setInlineCatName('');
+      setNewCatModalTargetRowId(null);
+      setSuccessToast(`Category "${cleanName}" created successfully!`);
+      setTimeout(() => setSuccessToast(null), 3000);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to create category');
+    } finally {
+      setCreatingInlineCat(false);
+    }
+  };
+
   // Live Dynamic Category Field Handlers (Strictly Per-Asset-Type Persisted for IT Department)
   const handleCreateCustomField = async () => {
     if (!newFieldLabel.trim()) return;
@@ -1862,6 +2001,7 @@ function AssetWizardContent() {
       assetImages,
       attachedDocs,
       peripherals,
+      bundledEquipment,
     };
 
     const existing = savedDrafts.filter((d) => d.draftId !== draftId);
@@ -1913,6 +2053,7 @@ function AssetWizardContent() {
     setAssetImages(draft.assetImages || []);
     setAttachedDocs(draft.attachedDocs || []);
     setPeripherals(draft.peripherals || []);
+    setBundledEquipment(draft.bundledEquipment || []);
 
     if (draft.assignedEmployeeId) {
       const emp = employees.find((e) => e.id === draft.assignedEmployeeId);
@@ -2107,6 +2248,38 @@ function AssetWizardContent() {
       }
     }
 
+    // Validate bundled equipment items (serials, categories, deduplication) in stock mode
+    const seenSerials = new Set<string>();
+    if (serialNumber.trim()) seenSerials.add(serialNumber.trim().toUpperCase());
+
+    for (let i = 0; i < bundledEquipment.length; i++) {
+      const item = bundledEquipment[i];
+      if (!item.category_id) {
+        setError(`Please select a Category for Handover Equipment #${i + 1}`);
+        setStep(2);
+        return;
+      }
+      if (item.source === 'new') {
+        if (!item.serial_number?.trim()) {
+          setError(`Serial Number is mandatory for new equipment "${item.category_name || `#${i + 1}`}". Please enter the serial number.`);
+          setStep(2);
+          return;
+        }
+        const cleanSer = item.serial_number.trim().toUpperCase();
+        if (seenSerials.has(cleanSer)) {
+          setError(`Duplicate serial number "${cleanSer}" detected for "${item.category_name || `#${i + 1}`}". Each equipment item must have a unique serial number.`);
+          setStep(2);
+          return;
+        }
+        seenSerials.add(cleanSer);
+      }
+      if (item.source === 'existing' && !item.existing_asset_id) {
+        setError(`Please select an available stock asset for "${item.category_name || `#${i + 1}`}", or switch to "New Equipment".`);
+        setStep(2);
+        return;
+      }
+    }
+
     setLoading(true);
 
     try {
@@ -2176,6 +2349,18 @@ function AssetWizardContent() {
         },
         categoryName: selectedCategoryName.trim().toUpperCase() || null,
         itAssetType,
+        bundledEquipment: bundledEquipment
+          .filter((b) => b.category_id && (b.source === 'existing' ? b.existing_asset_id : b.serial_number?.trim()))
+          .map((b) => ({
+            category_id: b.category_id,
+            category_name: b.category_name,
+            source: b.source,
+            manufacturer: b.manufacturer?.trim().toUpperCase() || undefined,
+            model: b.model?.trim().toUpperCase() || undefined,
+            serial_number: b.serial_number?.trim().toUpperCase() || undefined,
+            existing_asset_id: b.existing_asset_id || undefined,
+            notes: b.notes?.trim() || undefined,
+          })),
         peripherals: peripherals
           .filter((p) => p.is_included && p.peripheral_name.trim().length > 0)
           .map((p) => ({
@@ -2297,6 +2482,38 @@ function AssetWizardContent() {
       }
     }
 
+    // Validate bundled equipment items (serials, categories, deduplication)
+    const seenSerials = new Set<string>();
+    if (serialNumber.trim()) seenSerials.add(serialNumber.trim().toUpperCase());
+
+    for (let i = 0; i < bundledEquipment.length; i++) {
+      const item = bundledEquipment[i];
+      if (!item.category_id) {
+        setError(`Please select a Category for Handover Equipment #${i + 1}`);
+        setStep(2);
+        return;
+      }
+      if (item.source === 'new') {
+        if (!item.serial_number?.trim()) {
+          setError(`Serial Number is mandatory for new equipment "${item.category_name || `#${i + 1}`}". Please enter the serial number.`);
+          setStep(2);
+          return;
+        }
+        const cleanSer = item.serial_number.trim().toUpperCase();
+        if (seenSerials.has(cleanSer)) {
+          setError(`Duplicate serial number "${cleanSer}" detected for "${item.category_name || `#${i + 1}`}". Each equipment item must have a unique serial number.`);
+          setStep(2);
+          return;
+        }
+        seenSerials.add(cleanSer);
+      }
+      if (item.source === 'existing' && !item.existing_asset_id) {
+        setError(`Please select an available stock asset for "${item.category_name || `#${i + 1}`}", or switch to "New Equipment".`);
+        setStep(2);
+        return;
+      }
+    }
+
     if (assignmentMode === 'employee') {
       if (!assignedEmployeeId || !assignedEmployeeId.trim()) {
         if (matchedEmployee && (matchedEmployee.status === 'inactive' || (matchedEmployee.status as string) === 'resigned')) {
@@ -2397,6 +2614,18 @@ function AssetWizardContent() {
             }
           : undefined,
         itAssetType,
+        bundledEquipment: bundledEquipment
+          .filter((b) => b.category_id && (b.source === 'existing' ? b.existing_asset_id : b.serial_number?.trim()))
+          .map((b) => ({
+            category_id: b.category_id,
+            category_name: b.category_name,
+            source: b.source,
+            manufacturer: b.manufacturer?.trim().toUpperCase() || undefined,
+            model: b.model?.trim().toUpperCase() || undefined,
+            serial_number: b.serial_number?.trim().toUpperCase() || undefined,
+            existing_asset_id: b.existing_asset_id || undefined,
+            notes: b.notes?.trim() || undefined,
+          })),
         peripherals: peripherals
           .filter((p) => p.is_included && p.peripheral_name.trim().length > 0)
           .map((p) => ({
@@ -3312,99 +3541,316 @@ function AssetWizardContent() {
             </div>
           </div>
 
-          {/* Section 4: ADDITIONAL ITEMS & PERIPHERALS CHECKLIST */}
+          {/* Section 4: MULTI-ASSET HANDOVER EQUIPMENT & PERIPHERALS */}
           <div className="pt-4 border-t border-slate-100 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  4. Additional Handover Items &amp; Peripherals Checklist
+                <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <Package className="w-4 h-4 text-blue-600" />
+                  <span>4. Additional Handover Equipment &amp; Peripherals (Individual Assets)</span>
                 </h2>
-                <p className="text-[11px] text-slate-400">
-                  Bundle extra items/accessories handed over with the primary equipment (e.g. Monitor, Mouse, Adapter, Bag)
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Register extra equipment (Keyboard, Mouse, UPS, Scanner, CPU, Bag, etc.) as individual traceable assets with independent lifecycles.
                 </p>
               </div>
               <button
                 type="button"
-                onClick={handleAddPeripheral}
-                className="flex items-center gap-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 text-xs font-bold transition-all cursor-pointer"
+                onClick={handleAddBundledItem}
+                className="flex items-center gap-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 text-xs font-bold transition-all cursor-pointer self-start sm:self-auto shadow-2xs"
               >
                 <Plus className="w-3.5 h-3.5 text-blue-600" />
-                <span>+ Add Item</span>
+                <span>+ Add Equipment</span>
               </button>
             </div>
 
-            <div className="space-y-2">
-              {peripherals.length === 0 ? (
+            <div className="space-y-3">
+              {bundledEquipment.length === 0 ? (
                 <div className="text-center py-6 border border-dashed border-slate-200 rounded-xl bg-slate-50/50 text-slate-400 text-xs">
-                  <p className="font-semibold text-slate-500">No handover items added</p>
+                  <p className="font-semibold text-slate-600">No additional handover equipment added</p>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    Click &quot;+ Add Item&quot; above to bundle accessories (e.g. Monitor, Mouse, Keyboard, Charger, Bag)
+                    Click &quot;+ Add Equipment&quot; above to bundle separate items (Keyboard, Mouse, UPS, Scanner, CPU, Bag) with their own serial numbers.
                   </p>
                 </div>
               ) : (
-                peripherals.map((p, index) => (
+                bundledEquipment.map((item, index) => (
                   <div
-                    key={index}
-                    className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200/80"
+                    key={item.id || index}
+                    className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200 space-y-3 shadow-2xs"
                   >
-                    <input
-                      type="checkbox"
-                      checked={p.is_included}
-                      onChange={(e) => {
-                        const copy = [...peripherals];
-                        copy[index].is_included = e.target.checked;
-                        setPeripherals(copy);
-                      }}
-                      className="h-4 w-4 rounded bg-white border-slate-300 text-blue-600 focus:ring-0 cursor-pointer shrink-0"
-                    />
-                    <input
-                      type="text"
-                      value={p.peripheral_name}
-                      onChange={(e) => {
-                        const copy = [...peripherals];
-                        copy[index].peripheral_name = e.target.value.toUpperCase();
-                        setPeripherals(copy);
-                      }}
-                      placeholder="Peripheral name (e.g. DELL MONITOR, LAPTOP BAG)"
-                      className="flex-1 min-w-[180px] bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500 uppercase font-medium"
-                    />
-                    <input
-                      type="text"
-                      value={p.model_number}
-                      onChange={(e) => {
-                        const copy = [...peripherals];
-                        copy[index].model_number = e.target.value.toUpperCase();
-                        setPeripherals(copy);
-                      }}
-                      placeholder="Model No. (Optional)"
-                      className="w-full sm:w-36 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500 uppercase"
-                    />
-                    <input
-                      type="text"
-                      value={p.serial_number}
-                      onChange={(e) => {
-                        const copy = [...peripherals];
-                        copy[index].serial_number = e.target.value.toUpperCase();
-                        setPeripherals(copy);
-                      }}
-                      placeholder="Serial No. (Optional)"
-                      className="w-full sm:w-36 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500 uppercase"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleRemovePeripheral(index)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 transition-colors cursor-pointer shrink-0"
-                      title="Remove Item"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {/* Header: Category + Source Toggle + Delete */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pb-2.5 border-b border-slate-200/80">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[11px] font-black text-slate-600 uppercase tracking-wider">Category:</span>
+                        <select
+                          value={item.category_id}
+                          onChange={(e) => {
+                            if (e.target.value === '__ADD_NEW__') {
+                              setNewCatModalTargetRowId(item.id);
+                              setShowNewCatModal(true);
+                            } else {
+                              handleUpdateBundledItem(item.id, { category_id: e.target.value });
+                            }
+                          }}
+                          className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer shadow-2xs"
+                        >
+                          <option value="" disabled>Select Category...</option>
+                          {categories.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name.toUpperCase()}
+                            </option>
+                          ))}
+                          <option value="__ADD_NEW__" className="text-blue-600 font-black bg-blue-50">
+                            ➕ + Add New Category...
+                          </option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {/* Source Toggle */}
+                        <div className="inline-flex rounded-lg bg-slate-200/80 p-0.5 text-[11px] font-bold">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateBundledItem(item.id, { source: 'new' })}
+                            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                              item.source === 'new'
+                                ? 'bg-blue-600 text-white shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            🔘 New Equipment
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateBundledItem(item.id, { source: 'existing' })}
+                            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                              item.source === 'existing'
+                                ? 'bg-emerald-600 text-white shadow-2xs'
+                                : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                          >
+                            ⚪ From Available Stock
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBundledItem(item.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                          title="Remove Equipment"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Form Fields according to Source */}
+                    {item.source === 'new' ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">
+                            Brand / Make (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            value={item.manufacturer}
+                            onChange={(e) => handleUpdateBundledItem(item.id, { manufacturer: e.target.value.toUpperCase() })}
+                            placeholder="e.g. LOGITECH, DELL, HP"
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 uppercase focus:outline-none focus:border-blue-500 font-semibold"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">
+                            Model No. (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            value={item.model}
+                            onChange={(e) => handleUpdateBundledItem(item.id, { model: e.target.value.toUpperCase() })}
+                            placeholder="e.g. B100, KB216"
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-800 uppercase focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-rose-600 uppercase mb-0.5">
+                            Serial Number * (MANDATORY)
+                          </label>
+                          <input
+                            type="text"
+                            value={item.serial_number}
+                            onChange={(e) => handleUpdateBundledItem(item.id, { serial_number: e.target.value.toUpperCase() })}
+                            placeholder="Serial No. / Service Tag"
+                            className="w-full bg-white border border-rose-300 focus:border-rose-600 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 uppercase focus:outline-none shadow-2xs"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="pt-1">
+                        <label className="block text-[10px] font-bold text-emerald-900 uppercase mb-1 flex items-center gap-1.5">
+                          <Warehouse className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Select Available Asset from IT Stock:</span>
+                          {loadingStockCategory === item.category_id && (
+                            <span className="text-[10px] text-slate-400 font-normal">Loading stock...</span>
+                          )}
+                        </label>
+                        {(() => {
+                          const availableList = stockAssetsByCategory[item.category_id] || [];
+                          if (availableList.length === 0) {
+                            return (
+                              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-center justify-between">
+                                <span>No available {item.category_name || 'equipment'} in storage stock.</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateBundledItem(item.id, { source: 'new' })}
+                                  className="text-xs font-bold text-blue-700 underline cursor-pointer"
+                                >
+                                  Switch to &quot;New Equipment&quot;
+                                </button>
+                              </div>
+                            );
+                          }
+                          return (
+                            <select
+                              value={item.existing_asset_id}
+                              onChange={(e) => handleUpdateBundledItem(item.id, { existing_asset_id: e.target.value })}
+                              className="w-full bg-white border border-emerald-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-emerald-600 shadow-2xs"
+                            >
+                              <option value="" disabled>Choose an asset from available stock...</option>
+                              {availableList.map((stk) => (
+                                <option key={stk.id} value={stk.id}>
+                                  {stk.name} | Tag: {stk.asset_tag} | S/N: {stk.serial_number || 'N/A'} (AVAILABLE IN STOCK)
+                                </option>
+                              ))}
+                            </select>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                 ))
               )}
             </div>
           </div>
 
-          {/* Section 5: Technical Specifications (EXCLUSIVELY for Information Technology Department) */}
+          {/* Section 5 (Direct Entry / Stock Mode): TARGET PLANT & STORAGE LOCATION */}
+          {isDirectEntryMode && (
+            <div className="pt-4 border-t border-slate-100 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Warehouse className="w-4 h-4 text-emerald-600" />
+                    <span>5. Target Plant &amp; Storage Location (Stock Inventory) *</span>
+                  </h2>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Specify the factory unit and physical storage location where this equipment will be held in available stock.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200 space-y-3 shadow-2xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {/* Plant / Unit Selection */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1 flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Plant / Unit *</span>
+                    </label>
+                    {allowedPlants.length > 1 ? (
+                      <div className="space-y-1">
+                        <select
+                          value={plantId}
+                          onChange={(e) => {
+                            const nextPltId = e.target.value;
+                            setPlantId(nextPltId);
+                            setNewEmpPlantId(nextPltId);
+                            const selPlt = plants.find((p) => p.id === nextPltId);
+                            if (selPlt?.location_id) {
+                              setLocationId(selPlt.location_id);
+                              setNewEmpLocationId(selPlt.location_id);
+                            }
+                          }}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600 shadow-2xs cursor-pointer"
+                        >
+                          {allowedPlants.map((plant) => (
+                            <option key={plant.id} value={plant.id}>
+                              {plant.name}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-slate-400 font-medium">
+                          Choose among your authorized plants ({allowedPlants.length} accessible)
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="w-full bg-emerald-50/90 border border-emerald-200 rounded-xl px-3 py-2 text-xs font-bold text-emerald-950 flex items-center justify-between shadow-2xs">
+                        <span>{plants.find((plant) => plant.id === plantId)?.name || allowedPlants[0]?.name || 'Assigned Plant'}</span>
+                        <span className="text-[10px] text-emerald-800 font-black bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300 uppercase">
+                          Assigned (Locked)
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Physical Location Selection */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1 flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Location / Site *</span>
+                    </label>
+                    {allowedLocations.length > 1 && currentUser?.role === 'it_admin' ? (
+                      <div className="space-y-1">
+                        <select
+                          value={locationId}
+                          onChange={(e) => {
+                            const nextLocId = e.target.value;
+                            setLocationId(nextLocId);
+                            setNewEmpLocationId(nextLocId);
+                            const matchingPlants = allowedPlants.filter((p) => p.location_id === nextLocId);
+                            if (matchingPlants.length > 0 && !matchingPlants.some((p) => p.id === plantId)) {
+                              setPlantId(matchingPlants[0].id);
+                              setNewEmpPlantId(matchingPlants[0].id);
+                            }
+                          }}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600 shadow-2xs cursor-pointer"
+                        >
+                          {allowedLocations.map((loc) => (
+                            <option key={loc.id} value={loc.id}>
+                              {loc.name}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-slate-400 font-medium">Physical site or campus</p>
+                      </div>
+                    ) : (
+                      <div className="w-full bg-blue-50/60 border border-blue-200/80 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 flex items-center justify-between shadow-2xs">
+                        <span>{locations.find((loc) => loc.id === locationId)?.name || 'Assigned Location'}</span>
+                        <span className="text-[10px] text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded-md border border-blue-200">
+                          Assigned
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Exact Storage Room / Rack / Shelf */}
+                  <div className="sm:col-span-2">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                      Exact Storage Room / Rack / Shelf (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={exactLocation}
+                      onChange={(e) => setExactLocation(e.target.value.toUpperCase())}
+                      placeholder="e.g. IT STORE ROOM - RACK B, SHELF 3"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 uppercase focus:outline-none focus:border-emerald-500 font-medium"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Section 5/6: Technical Specifications (EXCLUSIVELY for Information Technology Department) */}
           {(() => {
             const deptUpper = (
               selectedDeptName ||
@@ -3416,7 +3862,7 @@ function AssetWizardContent() {
             const isLaptopOrDesktop = isITDept && (catUpper.includes('LAPTOP') || catUpper.includes('DESKTOP'));
             const isNetworkCapable = isLaptopOrDesktop;
 
-            // STRICTURE: Section 5 is strictly exclusive to Information Technology Department!
+            // STRICTURE: Section 5/6 is strictly exclusive to Information Technology Department!
             if (!isITDept) return null;
 
             return (
@@ -3427,7 +3873,7 @@ function AssetWizardContent() {
                     <h2 className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
                       <Sliders className="w-4 h-4 text-blue-600" />
                       <span>
-                        5. Technical Specifications ({selectedCategoryName || 'IT Asset'})
+                        {isDirectEntryMode ? '6' : '5'}. Technical Specifications ({selectedCategoryName || 'IT Asset'})
                       </span>
                     </h2>
                     <p className="text-[11px] text-slate-500 font-medium mt-0.5">
@@ -4359,6 +4805,67 @@ function AssetWizardContent() {
             </div>
           </div>
 
+          {/* Section 3: Handover Equipment Review in Step 3 */}
+          <div className="pt-4 border-t border-slate-100 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Package className="w-4 h-4 text-blue-600" />
+                <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  3. Handover Equipment Bundled With This Asset ({bundledEquipment.length})
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setStep(2);
+                  scrollToTop();
+                }}
+                className="text-xs font-bold text-blue-600 hover:text-blue-800 underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>Edit / Add Equipment in Step 2</span>
+              </button>
+            </div>
+
+            {bundledEquipment.length === 0 ? (
+              <div className="p-3.5 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <span className="text-slate-500">No additional equipment (Mouse, Keyboard, Bag, etc.) bundled.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStep(2);
+                    scrollToTop();
+                  }}
+                  className="font-bold text-blue-600 hover:text-blue-800 cursor-pointer self-start sm:self-auto"
+                >
+                  + Add Handover Equipment in Step 2 →
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {bundledEquipment.map((b, i) => (
+                  <div key={b.id || i} className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs flex items-center justify-between">
+                    <div>
+                      <div className="font-black text-slate-800 uppercase flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>{b.category_name || 'EQUIPMENT'}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                        {b.source === 'new' ? (
+                          <span>S/N: {b.serial_number || 'REQUIRED'} {b.manufacturer ? `(${b.manufacturer})` : ''}</span>
+                        ) : (
+                          <span className="text-emerald-700 font-bold">From Available Stock</span>
+                        )}
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${b.source === 'new' ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                      {b.source === 'new' ? 'New Asset' : 'Stock'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Submit Actions */}
           <div className="flex items-center justify-between pt-4 border-t border-slate-100">
             <button
@@ -4607,6 +5114,84 @@ function AssetWizardContent() {
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
                 >
                   {savingEmployee ? 'Saving Profile...' : 'Save & Assign Employee'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* INLINE EQUIPMENT CATEGORY CREATION MODAL                                  */}
+      {/* ========================================================================= */}
+      {showNewCatModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <Package className="w-5 h-5 text-blue-600" />
+                  <span>Add Equipment Category</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Create a new category for accessories or standalone equipment.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNewCatModal(false);
+                  setInlineCatName('');
+                  setNewCatModalTargetRowId(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 text-lg font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveInlineCategory();
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Category Name *
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={inlineCatName}
+                  onChange={(e) => setInlineCatName(e.target.value.toUpperCase())}
+                  placeholder="e.g. WEBCAM, DOCKING STATION, BARCODE SCANNER"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600 focus:bg-white uppercase shadow-2xs font-mono"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  This category will be saved in MySQL and available across all modules.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNewCatModal(false);
+                    setInlineCatName('');
+                    setNewCatModalTargetRowId(null);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingInlineCat || !inlineCatName.trim()}
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {creatingInlineCat ? 'Creating...' : 'Create & Select'}
                 </button>
               </div>
             </form>

@@ -206,6 +206,14 @@ export const SEED_CATEGORIES: Category[] = [
   { id: '44444444-4444-4444-4444-444444444408', name: 'Furniture', code: 'CAT-FURN', description: 'Workstations, Conference Tables, Ergonomic Chairs', icon: 'Armchair', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
   { id: '44444444-4444-4444-4444-444444444409', name: 'Software License', code: 'CAT-SW', description: 'CAD/CAM Licenses, ERP Seats, OS Licences', icon: 'Key', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
   { id: '44444444-4444-4444-4444-444444444410', name: 'Maintenance', code: 'CAT-MAINT', description: 'Welding Machines, Hydraulic Presses, Toolkits', icon: 'Wrench', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '44444444-4444-4444-4444-444444444411', name: 'Keyboard', code: 'CAT-KBD', description: 'Wired & Wireless Keyboards', icon: 'Keyboard', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '44444444-4444-4444-4444-444444444412', name: 'Mouse', code: 'CAT-MOU', description: 'Optical & Wireless Mice', icon: 'Mouse', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '44444444-4444-4444-4444-444444444413', name: 'UPS', code: 'CAT-UPS', description: 'Uninterruptible Power Supply Units', icon: 'Zap', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '44444444-4444-4444-4444-444444444414', name: 'Scanner', code: 'CAT-SCN', description: 'Document & Barcode Scanners', icon: 'Scan', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '44444444-4444-4444-4444-444444444415', name: 'CPU', code: 'CAT-CPU', description: 'Desktop Towers / Central Processing Units', icon: 'Cpu', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '44444444-4444-4444-4444-444444444416', name: 'Laptop Bag', code: 'CAT-BAG', description: 'Backpacks and carrying sleeves', icon: 'Briefcase', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '44444444-4444-4444-4444-444444444417', name: 'External Monitor', code: 'CAT-MON', description: 'LED / LCD Display Monitors', icon: 'Monitor', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: '44444444-4444-4444-4444-444444444418', name: 'Charger / Adapter', code: 'CAT-CHG', description: 'Power bricks and charging adapters', icon: 'BatteryCharging', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
 ];
 
 export const SEED_CATEGORY_FIELDS: CategoryFormField[] = [

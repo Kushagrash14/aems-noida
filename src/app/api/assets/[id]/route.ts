@@ -61,7 +61,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   try {
     const body = await req.json();
-    const { asset: assetUpdates, peripherals, customValues, categoryName } = body;
+    const { asset: assetUpdates, peripherals, customValues, categoryName, bundledEquipment } = body;
 
     if (categoryName && assetUpdates) {
       const resolvedCatId = await resolveCategoryIdByName(categoryName);
@@ -83,7 +83,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Target placement is outside your assigned administrative scope' }, { status: 403 });
     }
 
-    const updated = await updateAsset(id, assetUpdates || {}, peripherals, customValues, validation.user.id);
+    const updated = await updateAsset(id, assetUpdates || {}, peripherals, customValues, validation.user.id, bundledEquipment);
 
     // Sanitize updates for audit log to prevent multi-megabyte payloads from freezing the DB
     const sanitizedAuditUpdates = { ...(assetUpdates || {}) };

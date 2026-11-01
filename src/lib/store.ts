@@ -7,6 +7,7 @@ import {
   Asset,
   AssetPeripheral,
   AssetStatus,
+  BundledEquipmentInput,
   Category,
   CategoryFormField,
   Department,
@@ -1101,12 +1102,20 @@ export async function getAssets(filter?: {
   plantId?: string;
   departmentId?: string;
   search?: string;
+  status?: string;
   includeDeleted?: boolean;
 }): Promise<Asset[]> {
   if (env.isMockMode) {
     let result = memory.assets.filter((a) => (filter?.includeDeleted ? true : !a.is_deleted));
 
     if (filter?.categoryId) result = result.filter((a) => a.category_id === filter.categoryId);
+    if (filter?.status) {
+      if (filter.status === 'in_storage' || filter.status === 'available') {
+        result = result.filter((a) => (a.status === 'in_storage' || !a.assigned_employee_id) && a.status !== 'damaged' && a.status !== 'missing' && a.status !== 'scrapped');
+      } else {
+        result = result.filter((a) => a.status === filter.status);
+      }
+    }
     if (filter?.locationId) result = result.filter((a) => a.current_location_id === filter.locationId);
     if (filter?.plantId) result = result.filter((a) => a.current_plant_id === filter.plantId);
     if (filter?.departmentId) result = result.filter((a) => a.current_department_id === filter.departmentId);
@@ -1148,6 +1157,13 @@ export async function getAssets(filter?: {
 
   if (!filter?.includeDeleted) query = query.eq('is_deleted', false);
   if (filter?.categoryId) query = query.eq('category_id', filter.categoryId);
+  if (filter?.status) {
+    if (filter.status === 'in_storage' || filter.status === 'available') {
+      query = query.in('status', ['in_storage', 'available']).is('assigned_employee_id', null);
+    } else {
+      query = query.eq('status', filter.status);
+    }
+  }
   if (filter?.locationId) query = query.eq('current_location_id', filter.locationId);
   if (filter?.plantId) query = query.eq('current_plant_id', filter.plantId);
   if (filter?.departmentId) query = query.eq('current_department_id', filter.departmentId);
@@ -1223,6 +1239,12 @@ export async function getAssetById(id: string): Promise<Asset | null> {
   if (env.isMockMode) {
     const a = memory.assets.find((item) => item.id === id);
     if (!a) return null;
+    const childBundled = memory.assets
+      .filter((item) => item.parent_asset_id === id && !item.is_deleted)
+      .map((item) => ({
+        ...item,
+        category: memory.categories.find((c) => c.id === item.category_id),
+      }));
     return {
       ...a,
       category: memory.categories.find((c) => c.id === a.category_id),
@@ -1232,6 +1254,7 @@ export async function getAssetById(id: string): Promise<Asset | null> {
       assigned_employee: a.assigned_employee_id
         ? memory.employees.find((e) => e.id === a.assigned_employee_id) || null
         : null,
+      bundled_assets: childBundled,
     };
   }
 
@@ -1246,6 +1269,18 @@ export async function getAssetById(id: string): Promise<Asset | null> {
   if (asset.assigned_employee) {
     asset.assigned_employee = normalizeEmployeeRecord(asset.assigned_employee);
   }
+
+  // Load bundled child equipment assets if any
+  try {
+    const { data: childRows } = await db
+      .from('assets')
+      .select('*, category:categories(*)')
+      .eq('parent_asset_id', id)
+      .eq('is_deleted', false);
+    if (childRows) {
+      asset.bundled_assets = childRows as Asset[];
+    }
+  } catch {}
 
   // Check if asset has an active incident report (missing, damaged, scrap) to reflect accurate status
   try {
@@ -1879,12 +1914,131 @@ export async function generateUniqueAssetTag(
   return candidateTag;
 }
 
+async function processBundledEquipment(
+  parentAsset: Asset,
+  bundledItems: BundledEquipmentInput[] | undefined,
+  now: string,
+  actorId?: string
+) {
+  if (!bundledItems || !Array.isArray(bundledItems) || bundledItems.length === 0) return;
+
+  for (const item of bundledItems) {
+    if (!item.category_id) continue;
+    try {
+      if (item.source === 'existing' && item.existing_asset_id) {
+        const updateData = {
+          parent_asset_id: parentAsset.id,
+          assigned_employee_id: parentAsset.assigned_employee_id || null,
+          status: parentAsset.assigned_employee_id ? ('in_service' as const) : ('in_storage' as const),
+          current_location_id: parentAsset.current_location_id,
+          current_plant_id: parentAsset.current_plant_id,
+          current_department_id: parentAsset.current_department_id,
+          updated_at: now,
+        };
+        if (env.isMockMode) {
+          const existingInMem = memory.assets.find((a) => a.id === item.existing_asset_id);
+          if (existingInMem) Object.assign(existingInMem, updateData);
+        } else {
+          await db.from('assets').update(updateData).eq('id', item.existing_asset_id);
+        }
+        if (parentAsset.assigned_employee_id) {
+          await openAssignment({
+            assetId: item.existing_asset_id,
+            employeeId: parentAsset.assigned_employee_id,
+            assignedBy: actorId,
+            remarks: `Assigned as bundled equipment with ${parentAsset.name} (${parentAsset.asset_tag})`,
+            at: now,
+          });
+        }
+      } else if (item.source === 'new') {
+        const cleanSerial = item.serial_number ? item.serial_number.trim().toUpperCase() : null;
+        if (cleanSerial) {
+          const serialKey = normalizeSerial(cleanSerial);
+          if (serialKey) {
+            const existing = await findActiveAssetBySerial(serialKey);
+            if (existing) {
+              throw duplicateSerialError(serialKey, existing.asset_tag);
+            }
+          }
+        }
+        const childTag = await generateUniqueAssetTag(item.category_id);
+        const childId = crypto.randomUUID();
+        const cleanModel = item.model ? item.model.trim().toUpperCase() : null;
+        const cleanMake = item.manufacturer ? item.manufacturer.trim().toUpperCase() : null;
+        const catObj = env.isMockMode 
+          ? memory.categories.find((c) => c.id === item.category_id)
+          : null;
+        const catName = item.category_name || catObj?.name || 'EQUIPMENT';
+        const childName = `${cleanMake ? cleanMake + ' ' : ''}${catName}${cleanModel ? ' (' + cleanModel + ')' : ''}`.trim().toUpperCase();
+
+        const childAssetObj: Asset = {
+          id: childId,
+          asset_tag: childTag,
+          name: childName,
+          model: cleanModel,
+          manufacturer: cleanMake,
+          serial_number: cleanSerial,
+          category_id: item.category_id,
+          current_location_id: parentAsset.current_location_id,
+          current_plant_id: parentAsset.current_plant_id,
+          current_department_id: parentAsset.current_department_id,
+          assigned_employee_id: parentAsset.assigned_employee_id || null,
+          parent_asset_id: parentAsset.id,
+          status: parentAsset.assigned_employee_id ? 'in_service' : 'in_storage',
+          purchase_date: parentAsset.purchase_date || null,
+          invoice_number: parentAsset.invoice_number || null,
+          invoice_date: parentAsset.invoice_date || null,
+          vendor_name: parentAsset.vendor_name || null,
+          created_by: actorId || null,
+          created_at: now,
+          updated_at: now,
+          is_deleted: false,
+        };
+
+        if (env.isMockMode) {
+          memory.assets.unshift(childAssetObj);
+        } else {
+          await db.from('assets').insert(childAssetObj);
+        }
+
+        if (parentAsset.assigned_employee_id) {
+          await openAssignment({
+            assetId: childId,
+            employeeId: parentAsset.assigned_employee_id,
+            assignedBy: actorId,
+            remarks: `Registered and assigned as bundled equipment with ${parentAsset.name} (${parentAsset.asset_tag})`,
+            at: now,
+          });
+        }
+
+        await logAuditEvent({
+          event_category: 'data_change',
+          user_id: actorId,
+          user_role: 'admin',
+          action: 'ASSET_CREATE',
+          target_table: 'assets',
+          record_id: childId,
+          changes: {
+            asset_tag: childTag,
+            name: childName,
+            serial_number: cleanSerial,
+            parent_asset_id: parentAsset.id,
+          },
+        });
+      }
+    } catch (err) {
+      console.error('Error processing bundled equipment item:', err);
+    }
+  }
+}
+
 export async function createAsset(
   assetData: Omit<Asset, 'id' | 'created_at' | 'updated_at' | 'is_deleted'>,
   peripherals?: Array<{ peripheral_name: string; model_number?: string; serial_number?: string; is_included: boolean; notes?: string }>,
   customValues?: Record<string, string>,
   actorId?: string,
-  itAssetType?: string
+  itAssetType?: string,
+  bundledEquipment?: BundledEquipmentInput[]
 ): Promise<Asset> {
   const assetId = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -1915,10 +2069,10 @@ export async function createAsset(
     return withNamedLock(`asset-serial:${serialKey}`, async () => {
       const existing = await findActiveAssetBySerial(serialKey);
       if (existing) throw duplicateSerialError(serialKey, existing.asset_tag);
-      return insertAssetRecord(assetId, now, safeAssetData, peripherals, customValues, actorId, itAssetType);
+      return insertAssetRecord(assetId, now, safeAssetData, peripherals, customValues, actorId, itAssetType, bundledEquipment);
     });
   }
-  return insertAssetRecord(assetId, now, safeAssetData, peripherals, customValues, actorId, itAssetType);
+  return insertAssetRecord(assetId, now, safeAssetData, peripherals, customValues, actorId, itAssetType, bundledEquipment);
 }
 
 async function insertAssetRecord(
@@ -1928,7 +2082,8 @@ async function insertAssetRecord(
   peripherals: Array<{ peripheral_name: string; model_number?: string; serial_number?: string; is_included: boolean; notes?: string }> | undefined,
   customValues: Record<string, string> | undefined,
   actorId: string | undefined,
-  itAssetType: string | undefined
+  itAssetType: string | undefined,
+  bundledEquipment?: BundledEquipmentInput[]
 ): Promise<Asset> {
   // ATOMIC TAG ASSIGNMENT & CONCURRENCY COLLISION GUARD:
   let assignedTag = safeAssetData.asset_tag;
@@ -1963,6 +2118,8 @@ async function insertAssetRecord(
         at: now,
       });
     }
+    // Process bundled equipment child assets
+    await processBundledEquipment(newAsset, bundledEquipment, now, actorId);
     invalidateAssetCache();
     return newAsset;
   }
@@ -1974,7 +2131,7 @@ async function insertAssetRecord(
     'invoice_number', 'invoice_date',
     'vendor_name', 'warranty_expiry', 'amc_vendor', 'amc_expiry',
     'invoice_document_path', 'current_location_id', 'current_plant_id',
-    'current_department_id', 'assigned_employee_id', 'status',
+    'current_department_id', 'assigned_employee_id', 'parent_asset_id', 'status',
     'is_deleted', 'deleted_at', 'deleted_by', 'created_by',
     'created_at', 'updated_at'
   ]);
@@ -2051,6 +2208,9 @@ async function insertAssetRecord(
         }
       }
 
+      // Process bundled equipment child assets
+      await processBundledEquipment(data as Asset, bundledEquipment, now, actorId);
+
       invalidateAssetCache();
       return data as Asset;
     }
@@ -2077,7 +2237,8 @@ export async function updateAsset(
   assetUpdates: Partial<Asset>,
   peripherals?: AssetPeripheral[],
   customValues?: Record<string, any>,
-  updatedBy?: string
+  updatedBy?: string,
+  bundledEquipment?: BundledEquipmentInput[]
 ): Promise<Asset | null> {
   const newSerial = normalizeSerial(assetUpdates.serial_number);
   if (newSerial) {
@@ -2088,10 +2249,10 @@ export async function updateAsset(
         const duplicate = await findActiveAssetBySerial(newSerial, id);
         if (duplicate) throw duplicateSerialError(newSerial, duplicate.asset_tag);
       }
-      return applyAssetUpdate(id, assetUpdates, peripherals, customValues, updatedBy);
+      return applyAssetUpdate(id, assetUpdates, peripherals, customValues, updatedBy, bundledEquipment);
     });
   }
-  return applyAssetUpdate(id, assetUpdates, peripherals, customValues, updatedBy);
+  return applyAssetUpdate(id, assetUpdates, peripherals, customValues, updatedBy, bundledEquipment);
 }
 
 async function applyAssetUpdate(
@@ -2099,7 +2260,8 @@ async function applyAssetUpdate(
   assetUpdates: Partial<Asset>,
   peripherals?: AssetPeripheral[],
   customValues?: Record<string, any>,
-  updatedBy?: string
+  updatedBy?: string,
+  bundledEquipment?: BundledEquipmentInput[]
 ): Promise<Asset | null> {
   const VALID_ASSET_COLUMNS = new Set([
     'id', 'asset_tag', 'sap_asset_code', 'serial_number', 'name', 'model', 'manufacturer',
@@ -2107,7 +2269,7 @@ async function applyAssetUpdate(
     'invoice_number', 'invoice_date',
     'vendor_name', 'warranty_expiry', 'amc_vendor', 'amc_expiry',
     'invoice_document_path', 'current_location_id', 'current_plant_id',
-    'current_department_id', 'assigned_employee_id', 'status',
+    'current_department_id', 'assigned_employee_id', 'parent_asset_id', 'status',
     'is_deleted', 'deleted_at', 'deleted_by', 'created_by',
     'created_at', 'updated_at'
   ]);
@@ -2247,6 +2409,13 @@ async function applyAssetUpdate(
       invalidateAssetCache();
       const msg = e instanceof Error ? e.message : 'unknown error';
       throw new Error(`Asset details were saved, but the custody history could not be updated: ${msg}`);
+    }
+  }
+
+  if (bundledEquipment && bundledEquipment.length > 0) {
+    const updatedAsset = await getAssetById(id);
+    if (updatedAsset) {
+      await processBundledEquipment(updatedAsset, bundledEquipment, now, updatedBy);
     }
   }
 
@@ -2663,9 +2832,10 @@ export async function deassignAssetFromEmployee(params: {
   });
 
   const stockUpdate = {
-      assigned_employee_id: null,
+    assigned_employee_id: null,
+    parent_asset_id: null,
     status: 'in_storage' as const,
-      updated_at: now,
+    updated_at: now,
   };
 
   let data: Asset;
@@ -4210,7 +4380,7 @@ export async function batchImportAssets(
         'invoice_number', 'invoice_date',
         'vendor_name', 'warranty_expiry', 'amc_vendor', 'amc_expiry',
         'invoice_document_path', 'current_location_id', 'current_plant_id',
-        'current_department_id', 'assigned_employee_id', 'status',
+        'current_department_id', 'assigned_employee_id', 'parent_asset_id', 'status',
         'is_deleted', 'created_by', 'created_at', 'updated_at'
       ]);
 

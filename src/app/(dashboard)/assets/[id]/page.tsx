@@ -89,6 +89,12 @@ function AssetDetailContent() {
   const [deassigning, setDeassigning] = useState(false);
   const [actionToast, setActionToast] = useState<string | null>(null);
 
+  // Child / Bundled Equipment Deassignment
+  const [deassigningChildAsset, setDeassigningChildAsset] = useState<Asset | null>(null);
+  const [childReturnCondition, setChildReturnCondition] = useState('Good / Working');
+  const [childReturnRemarks, setChildReturnRemarks] = useState('');
+  const [submittingChildReturn, setSubmittingChildReturn] = useState(false);
+
   // 3-Lines Action Dropdown Menu state & ref
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -295,6 +301,35 @@ function AssetDetailContent() {
       alert(err instanceof Error ? err.message : 'De-assignment failed');
     } finally {
       setDeassigning(false);
+    }
+  };
+
+  const handleReturnChildAsset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deassigningChildAsset) return;
+    setSubmittingChildReturn(true);
+    try {
+      const res = await fetch('/api/assets/deassign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assetId: deassigningChildAsset.id,
+          returnCondition: childReturnCondition,
+          remarks: childReturnRemarks.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to return item to stock');
+
+      await reloadAssetFromServer();
+      setDeassigningChildAsset(null);
+      setChildReturnRemarks('');
+      setActionToast(`${deassigningChildAsset.name} returned to Available Stock!`);
+      setTimeout(() => setActionToast(null), 3500);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Return failed');
+    } finally {
+      setSubmittingChildReturn(false);
     }
   };
 
@@ -634,6 +669,23 @@ function AssetDetailContent() {
             <ExternalLink className="w-3 h-3" />
           </span>
         </div>
+
+        {/* Parent Equipment Link Banner if this asset was bundled */}
+        {asset.parent_asset_id && (
+          <div className="bg-indigo-50/90 border border-indigo-200 rounded-xl px-4 py-3 flex items-center justify-between text-xs font-semibold text-indigo-900 shadow-2xs">
+            <div className="flex items-center gap-2">
+              <Package className="w-4 h-4 text-indigo-600 shrink-0" />
+              <span>Bundled Equipment: This item was handed over as part of a primary equipment kit.</span>
+            </div>
+            <Link
+              href={`/assets/${asset.parent_asset_id}`}
+              className="text-[11px] font-bold text-indigo-700 hover:underline flex items-center gap-1"
+            >
+              <span>VIEW PRIMARY ASSET</span>
+              <ExternalLink className="w-3 h-3" />
+            </Link>
+          </div>
+        )}
 
         {/* =================================================================== */}
         {/* CUSTODIAN & ALLOCATION STATUS CARD (Interactive Stock & Custody)   */}
@@ -1046,17 +1098,87 @@ function AssetDetailContent() {
         </div>
 
         {/* =================================================================== */}
-        {/* SECTION 4: ADDITIONAL HANDOVER ITEMS & PERIPHERALS CHECKLIST       */}
+        {/* SECTION 4: BUNDLED HANDOVER EQUIPMENT & PERIPHERALS                */}
         {/* =================================================================== */}
         <div className="space-y-4 pt-4 border-t border-slate-100">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
-            <Package className="w-3.5 h-3.5 text-blue-600" />
-            <span>ADDITIONAL HANDOVER ITEMS &amp; PERIPHERALS</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+              <Package className="w-3.5 h-3.5 text-blue-600" />
+              <span>
+                BUNDLED HANDOVER EQUIPMENT ({asset.bundled_assets?.length || 0})
+              </span>
+            </div>
+            {asset.bundled_assets && asset.bundled_assets.length > 0 && (
+              <span className="text-[11px] text-slate-400">
+                Individual serialized assets linked to this equipment
+              </span>
+            )}
           </div>
 
-          {asset.peripherals && asset.peripherals.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {asset.peripherals.map((p, i) => (
+          {((asset.bundled_assets && asset.bundled_assets.length > 0) || (asset.peripherals && asset.peripherals.length > 0)) ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Real Bundled Child Assets */}
+              {asset.bundled_assets?.map((child) => (
+                <div
+                  key={child.id}
+                  className="p-3.5 rounded-xl bg-white border border-slate-200/90 hover:border-slate-300 shadow-2xs flex flex-col justify-between gap-3 text-xs transition-all"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <Link
+                          href={`/assets/${child.id}`}
+                          className="font-black text-slate-900 hover:text-blue-600 uppercase transition-colors"
+                        >
+                          {child.name}
+                        </Link>
+                      </div>
+                      <div className="flex items-center gap-2 font-mono text-[11px] text-slate-500 pl-6">
+                        <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-bold border border-slate-200">
+                          {child.asset_tag}
+                        </span>
+                        {child.serial_number && <span>S/N: {child.serial_number}</span>}
+                      </div>
+                    </div>
+
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase shrink-0 ${
+                      child.status === 'in_service'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {child.status === 'in_service' ? 'In Service' : child.status}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px]">
+                    <Link
+                      href={`/assets/${child.id}`}
+                      className="font-bold text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      <span>View Asset Page</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </Link>
+
+                    {child.status === 'in_service' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeassigningChildAsset(child);
+                          setChildReturnCondition('Good / Working');
+                          setChildReturnRemarks('');
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[11px] border border-rose-200 transition-colors cursor-pointer"
+                      >
+                        Return to Stock
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {/* Legacy Peripherals if any exist */}
+              {asset.peripherals?.map((p, i) => (
                 <div
                   key={p.id || i}
                   className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs"
@@ -1519,6 +1641,90 @@ function AssetDetailContent() {
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>{deassigning ? 'De-assigning...' : 'Confirm De-assignment'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Return Single Bundled Child Item Modal */}
+      {deassigningChildAsset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="text-base font-black text-slate-900">
+                  Return Item to Stock
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Return this item to IT Available Stock pool. Primary equipment remains assigned.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeassigningChildAsset(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 text-xs text-blue-900 space-y-1">
+              <div className="font-black flex items-center gap-1.5">
+                <Package className="w-3.5 h-3.5 text-blue-600" />
+                <span>{deassigningChildAsset.name}</span>
+              </div>
+              <div className="text-[11px] text-blue-700 font-mono">
+                Tag: {deassigningChildAsset.asset_tag} {deassigningChildAsset.serial_number ? `| S/N: ${deassigningChildAsset.serial_number}` : ''}
+              </div>
+            </div>
+
+            <form onSubmit={handleReturnChildAsset} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Return Condition *
+                </label>
+                <select
+                  value={childReturnCondition}
+                  onChange={(e) => setChildReturnCondition(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="Good / Working">Good / Working Condition</option>
+                  <option value="Minor Cosmetic Damage">Minor Cosmetic Damage</option>
+                  <option value="Needs Cleaning / Inspection">Needs Cleaning / Inspection</option>
+                  <option value="Defective / Needs Repair">Defective / Needs Repair</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Inspection Remarks (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={childReturnRemarks}
+                  onChange={(e) => setChildReturnRemarks(e.target.value)}
+                  placeholder="e.g. Returned to storage, replaced or not needed"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setDeassigningChildAsset(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs font-bold hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingChildReturn}
+                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-xs"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{submittingChildReturn ? 'Returning...' : 'Confirm Return to Stock'}</span>
                 </button>
               </div>
             </form>

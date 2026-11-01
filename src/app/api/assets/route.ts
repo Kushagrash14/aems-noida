@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
   const plantId = searchParams.get('plantId') || undefined;
   const departmentId = searchParams.get('departmentId') || undefined;
   const search = searchParams.get('search') || undefined;
+  const status = searchParams.get('status') || undefined;
   const includeDeleted = searchParams.get('includeDeleted') === 'true';
 
   let assets = await getAssets({
@@ -45,6 +46,7 @@ export async function GET(req: NextRequest) {
     plantId,
     departmentId,
     search,
+    status,
     includeDeleted,
   });
 
@@ -77,7 +79,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { asset, peripherals, customValues, itAssetType, categoryName } = body;
+    const { asset, peripherals, customValues, itAssetType, categoryName, bundledEquipment } = body;
 
     const effectiveCategoryName =
       categoryName || inferItCategoryName(itAssetType, asset?.name, asset?.model);
@@ -177,7 +179,8 @@ export async function POST(req: NextRequest) {
         peripherals,
         customValues,
         validation.user.id,
-        itAssetType
+        itAssetType,
+        bundledEquipment
       );
     } catch (createErr) {
       await releaseDuplicateApproval(approval);

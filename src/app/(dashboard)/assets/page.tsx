@@ -58,14 +58,15 @@ function AssetsDirectoryContent() {
   const newAssetTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleNewAssetBtnClick = () => {
+    const plantQuery = selectedPlant ? `&plantId=${encodeURIComponent(selectedPlant)}` : '';
     if (newAssetTimerRef.current) {
       clearTimeout(newAssetTimerRef.current);
       newAssetTimerRef.current = null;
-      router.push('/assets/new?mode=stock');
+      router.push(`/assets/new?mode=stock${plantQuery}`);
     } else {
       newAssetTimerRef.current = setTimeout(() => {
         newAssetTimerRef.current = null;
-        router.push('/assets/new');
+        router.push(`/assets/new${selectedPlant ? `?plantId=${encodeURIComponent(selectedPlant)}` : ''}`);
       }, 250);
     }
   };

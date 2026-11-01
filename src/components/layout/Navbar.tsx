@@ -477,7 +477,7 @@ function NavbarContent({ user, scope }: NavbarProps) {
                 </div>
 
                 <Link
-                  href="/assets/new?mode=assigned"
+                  href={`/assets/new?mode=assigned${localPlant ? `&plantId=${encodeURIComponent(localPlant)}` : ''}`}
                   onClick={() => setEntryMenuOpen(false)}
                   className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-blue-50 transition-colors group cursor-pointer"
                 >
@@ -491,7 +491,7 @@ function NavbarContent({ user, scope }: NavbarProps) {
                 </Link>
 
                 <Link
-                  href="/assets/new?mode=stock"
+                  href={`/assets/new?mode=stock${localPlant ? `&plantId=${encodeURIComponent(localPlant)}` : ''}`}
                   onClick={() => setEntryMenuOpen(false)}
                   className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-emerald-50 transition-colors group cursor-pointer"
                 >

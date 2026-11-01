@@ -205,6 +205,7 @@ CREATE TABLE IF NOT EXISTS assets (
   current_plant_id       CHAR(36)      NOT NULL,
   current_department_id  CHAR(36)      NOT NULL,
   assigned_employee_id   CHAR(36)      NULL,
+  parent_asset_id        CHAR(36)      NULL,
   status                 ENUM('in_service','maintenance','damaged','missing','scrapped','in_storage') NOT NULL DEFAULT 'in_service',
   is_deleted             TINYINT(1)    NOT NULL DEFAULT 0,
   deleted_at             DATETIME(3)   NULL,
@@ -221,12 +222,14 @@ CREATE TABLE IF NOT EXISTS assets (
   KEY idx_assets_plant (current_plant_id),
   KEY idx_assets_department (current_department_id),
   KEY idx_assets_employee (assigned_employee_id),
+  KEY idx_assets_parent (parent_asset_id),
   KEY idx_assets_status (status, is_deleted),
   CONSTRAINT fk_assets_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE RESTRICT,
   CONSTRAINT fk_assets_location FOREIGN KEY (current_location_id) REFERENCES locations(id) ON DELETE RESTRICT,
   CONSTRAINT fk_assets_plant FOREIGN KEY (current_plant_id) REFERENCES plants(id) ON DELETE RESTRICT,
   CONSTRAINT fk_assets_department FOREIGN KEY (current_department_id) REFERENCES departments(id) ON DELETE RESTRICT,
   CONSTRAINT fk_assets_employee FOREIGN KEY (assigned_employee_id) REFERENCES employees(id) ON DELETE SET NULL,
+  CONSTRAINT fk_assets_parent FOREIGN KEY (parent_asset_id) REFERENCES assets(id) ON DELETE SET NULL,
   CONSTRAINT fk_assets_deleted_by FOREIGN KEY (deleted_by) REFERENCES users(id) ON DELETE SET NULL,
   CONSTRAINT fk_assets_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

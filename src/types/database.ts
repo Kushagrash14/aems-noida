@@ -168,6 +168,7 @@ export interface Asset {
   current_plant_id: string;
   current_department_id: string;
   assigned_employee_id?: string | null;
+  parent_asset_id?: string | null;
   
   // Status & Soft Delete
   status: AssetStatus;
@@ -186,7 +187,19 @@ export interface Asset {
   department?: Department;
   assigned_employee?: Employee | null;
   peripherals?: AssetPeripheral[];
+  bundled_assets?: Asset[];
   custom_values?: Record<string, string> | AssetCustomValue[];
+}
+
+export interface BundledEquipmentInput {
+  category_id: string;
+  category_name?: string;
+  source: 'new' | 'existing';
+  manufacturer?: string;
+  model?: string;
+  serial_number?: string;
+  existing_asset_id?: string;
+  notes?: string;
 }
 
 export interface AssetCustomValue {
