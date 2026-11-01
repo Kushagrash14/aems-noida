@@ -590,14 +590,41 @@ export async function deleteDepartment(id: string): Promise<boolean> {
 // -----------------------------------------------------------------------------
 // Categories & Dynamic Form Fields
 // -----------------------------------------------------------------------------
+export const DEFAULT_ACCESSORY_SEED = [
+  { id: '44444444-4444-4444-4444-444444444411', name: 'Keyboard', code: 'CAT-KBD', description: 'Wired & Wireless Keyboards', icon: 'Keyboard', is_active: 1 },
+  { id: '44444444-4444-4444-4444-444444444412', name: 'Mouse', code: 'CAT-MOU', description: 'Optical & Wireless Mice', icon: 'Mouse', is_active: 1 },
+  { id: '44444444-4444-4444-4444-444444444413', name: 'UPS', code: 'CAT-UPS', description: 'Uninterruptible Power Supplies', icon: 'Zap', is_active: 1 },
+  { id: '44444444-4444-4444-4444-444444444414', name: 'Scanner', code: 'CAT-SCN', description: 'Barcode & Document Scanners', icon: 'Scan', is_active: 1 },
+  { id: '44444444-4444-4444-4444-444444444415', name: 'CPU', code: 'CAT-CPU', description: 'Desktop Central Processing Units', icon: 'Cpu', is_active: 1 },
+  { id: '44444444-4444-4444-4444-444444444416', name: 'Laptop Bag', code: 'CAT-BAG', description: 'Backpacks & Sleeves', icon: 'Briefcase', is_active: 1 },
+  { id: '44444444-4444-4444-4444-444444444417', name: 'External Monitor', code: 'CAT-MON', description: 'Secondary Displays & Screens', icon: 'Monitor', is_active: 1 },
+  { id: '44444444-4444-4444-4444-444444444418', name: 'Charger / Adapter', code: 'CAT-PWR', description: 'Power Adapters & Charging Cables', icon: 'Power', is_active: 1 },
+];
+
 export async function getCategories(): Promise<Category[]> {
   if (env.isMockMode) return memory.categories.filter((c) => c.is_active !== false);
   const now = Date.now();
   if (storeCache.categories && storeCache.categories.expiresAt > now) {
     return storeCache.categories.data;
   }
-  const { data } = await db.from('categories').select('*').order('name');
-  const result = ((data as Category[]) || []).filter((c) => c.is_active !== false);
+  let { data } = await db.from('categories').select('*').order('name');
+  let result = ((data as Category[]) || []).filter((c) => c.is_active !== false);
+
+  // Auto-seed default accessory categories into database if missing
+  const existingNames = new Set(result.map((c) => c.name.toUpperCase()));
+  const missingSeeds = DEFAULT_ACCESSORY_SEED.filter((s) => !existingNames.has(s.name.toUpperCase()));
+  if (missingSeeds.length > 0) {
+    try {
+      for (const m of missingSeeds) {
+        await db.from('categories').insert(m);
+      }
+      const { data: refreshed } = await db.from('categories').select('*').order('name');
+      if (refreshed) result = (refreshed as Category[]).filter((c) => c.is_active !== false);
+    } catch (e) {
+      console.warn('Auto-seed categories warning:', e);
+    }
+  }
+
   storeCache.categories = { data: result, expiresAt: now + 120_000 };
   return result;
 }
@@ -1958,6 +1985,26 @@ async function processBundledEquipment(
             const existing = await findActiveAssetBySerial(serialKey);
             if (existing) {
               throw duplicateSerialError(serialKey, existing.asset_tag);
+            }
+          }
+        }
+        if (!env.isMockMode) {
+          const { data: catExists } = await db.from('categories').select('id').eq('id', item.category_id).maybeSingle();
+          if (!catExists) {
+            const defCat = DEFAULT_ACCESSORY_SEED.find((d) => d.id === item.category_id);
+            const catName = item.category_name || defCat?.name || 'Equipment';
+            const catCode = defCat?.code || `CAT-${catName.slice(0, 4).toUpperCase().replace(/[^A-Z]/g, '') || 'EQP'}`;
+            try {
+              await db.from('categories').insert({
+                id: item.category_id,
+                name: catName,
+                code: catCode,
+                description: defCat?.description || 'Accessory Equipment',
+                icon: defCat?.icon || 'Package',
+                is_active: 1,
+              });
+            } catch (catErr) {
+              console.warn('Category insert fallback warning:', catErr);
             }
           }
         }

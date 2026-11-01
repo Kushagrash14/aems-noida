@@ -225,6 +225,30 @@ export interface BundledItemRow {
   serialError?: string;
 }
 
+export const DEFAULT_EQUIPMENT_CATEGORIES: Category[] = [
+  { id: '44444444-4444-4444-4444-444444444412', name: 'Mouse', code: 'CAT-MOU', description: 'Optical & Wireless Mice', icon: 'Mouse', is_active: true, created_at: '', updated_at: '' },
+  { id: '44444444-4444-4444-4444-444444444411', name: 'Keyboard', code: 'CAT-KBD', description: 'Wired & Wireless Keyboards', icon: 'Keyboard', is_active: true, created_at: '', updated_at: '' },
+  { id: '44444444-4444-4444-4444-444444444413', name: 'UPS', code: 'CAT-UPS', description: 'Uninterruptible Power Supplies', icon: 'Zap', is_active: true, created_at: '', updated_at: '' },
+  { id: '44444444-4444-4444-4444-444444444414', name: 'Scanner', code: 'CAT-SCN', description: 'Barcode & Document Scanners', icon: 'Scan', is_active: true, created_at: '', updated_at: '' },
+  { id: '44444444-4444-4444-4444-444444444415', name: 'CPU', code: 'CAT-CPU', description: 'Desktop Central Processing Units', icon: 'Cpu', is_active: true, created_at: '', updated_at: '' },
+  { id: '44444444-4444-4444-4444-444444444416', name: 'Laptop Bag', code: 'CAT-BAG', description: 'Backpacks & Sleeves', icon: 'Briefcase', is_active: true, created_at: '', updated_at: '' },
+  { id: '44444444-4444-4444-4444-444444444417', name: 'External Monitor', code: 'CAT-MON', description: 'Secondary Displays & Screens', icon: 'Monitor', is_active: true, created_at: '', updated_at: '' },
+  { id: '44444444-4444-4444-4444-444444444418', name: 'Charger / Adapter', code: 'CAT-PWR', description: 'Power Adapters & Charging Cables', icon: 'Power', is_active: true, created_at: '', updated_at: '' },
+];
+
+export function safeUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try {
+      return crypto.randomUUID();
+    } catch {}
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 function formatMacAddress(input: string): string {
   const clean = input.toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 12);
   const parts = clean.match(/.{1,2}/g);
@@ -1763,11 +1787,18 @@ function AssetWizardContent() {
   };
 
   const handleAddBundledItem = () => {
-    const mouseCat = categories.find((c) => c.name.toUpperCase().includes('MOUSE'));
-    const kbdCat = categories.find((c) => c.name.toUpperCase().includes('KEYBOARD'));
-    const defaultCat = mouseCat || kbdCat || categories[0];
+    const existingIds = new Set(categories.map((c) => c.id));
+    const allAvailableCats = [
+      ...categories,
+      ...DEFAULT_EQUIPMENT_CATEGORIES.filter(
+        (d) => !existingIds.has(d.id) && !categories.some((c) => c.name.toUpperCase() === d.name.toUpperCase())
+      ),
+    ];
+    const mouseCat = allAvailableCats.find((c) => c.name.toUpperCase().includes('MOUSE'));
+    const kbdCat = allAvailableCats.find((c) => c.name.toUpperCase().includes('KEYBOARD'));
+    const defaultCat = mouseCat || kbdCat || allAvailableCats[0];
 
-    const newRowId = crypto.randomUUID();
+    const newRowId = safeUUID();
     const newRow: BundledItemRow = {
       id: newRowId,
       category_id: defaultCat?.id || '',
@@ -1862,7 +1893,7 @@ function AssetWizardContent() {
     const storageKey = `aems_it_cat_fields_${catUpper}`;
 
     const localField: CategoryFormField = {
-      id: crypto.randomUUID(),
+      id: safeUUID(),
       category_id: targetCatId,
       field_name: fieldName,
       field_label: newFieldLabel.trim(),
@@ -1965,7 +1996,7 @@ function AssetWizardContent() {
 
   // Save Draft (Zero-Lock: Does NOT burn or reserve an official asset tag)
   const handleSaveDraft = () => {
-    const draftId = activeDraftId || crypto.randomUUID();
+    const draftId = activeDraftId || safeUUID();
     const draft: DraftData = {
       draftId,
       savedAt: new Date().toLocaleString(),
@@ -3594,11 +3625,20 @@ function AssetWizardContent() {
                           className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500 cursor-pointer shadow-2xs"
                         >
                           <option value="" disabled>Select Category...</option>
-                          {categories.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name.toUpperCase()}
-                            </option>
-                          ))}
+                          {(() => {
+                            const existingIds = new Set(categories.map((c) => c.id));
+                            const merged = [
+                              ...categories,
+                              ...DEFAULT_EQUIPMENT_CATEGORIES.filter(
+                                (d) => !existingIds.has(d.id) && !categories.some((c) => c.name.toUpperCase() === d.name.toUpperCase())
+                              ),
+                            ];
+                            return merged.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name.toUpperCase()}
+                              </option>
+                            ));
+                          })()}
                           <option value="__ADD_NEW__" className="text-blue-600 font-black bg-blue-50">
                             ➕ + Add New Category...
                           </option>
