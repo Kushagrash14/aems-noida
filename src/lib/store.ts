@@ -4606,6 +4606,23 @@ export interface AssetFormSuggestions {
   vendors: string[];
 }
 
+function toSafeDateStr(val: any): string | null {
+  if (!val) return null;
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return null;
+    return val.toISOString().slice(0, 10);
+  }
+  const s = String(val).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    return s.slice(0, 10);
+  }
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+  return null;
+}
+
 export async function getAssetFormSuggestions(): Promise<AssetFormSuggestions> {
   if (env.isMockMode) {
     const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
@@ -4628,22 +4645,22 @@ export async function getAssetFormSuggestions(): Promise<AssetFormSuggestions> {
           existing.asset_count++;
           if (!existing.vendor_name && a.vendor_name) existing.vendor_name = a.vendor_name;
           if (!existing.invoice_number && a.invoice_number) existing.invoice_number = a.invoice_number;
-          if (!existing.invoice_date && a.invoice_date) existing.invoice_date = a.invoice_date.slice(0, 10);
-          if (!existing.purchase_date && a.purchase_date) existing.purchase_date = a.purchase_date.slice(0, 10);
-          if (!existing.warranty_expiry && a.warranty_expiry) existing.warranty_expiry = a.warranty_expiry.slice(0, 10);
+          if (!existing.invoice_date && a.invoice_date) existing.invoice_date = toSafeDateStr(a.invoice_date);
+          if (!existing.purchase_date && a.purchase_date) existing.purchase_date = toSafeDateStr(a.purchase_date);
+          if (!existing.warranty_expiry && a.warranty_expiry) existing.warranty_expiry = toSafeDateStr(a.warranty_expiry);
           if (!existing.amc_vendor && a.amc_vendor) existing.amc_vendor = a.amc_vendor;
-          if (!existing.amc_expiry && a.amc_expiry) existing.amc_expiry = a.amc_expiry.slice(0, 10);
+          if (!existing.amc_expiry && a.amc_expiry) existing.amc_expiry = toSafeDateStr(a.amc_expiry);
           if (!existing.manufacturer && a.manufacturer) existing.manufacturer = a.manufacturer;
         } else {
           poMap.set(poKey, {
             po_number: poKey,
             vendor_name: a.vendor_name || null,
             invoice_number: a.invoice_number || null,
-            invoice_date: a.invoice_date ? a.invoice_date.slice(0, 10) : null,
-            purchase_date: a.purchase_date ? a.purchase_date.slice(0, 10) : null,
-            warranty_expiry: a.warranty_expiry ? a.warranty_expiry.slice(0, 10) : null,
+            invoice_date: toSafeDateStr(a.invoice_date),
+            purchase_date: toSafeDateStr(a.purchase_date),
+            warranty_expiry: toSafeDateStr(a.warranty_expiry),
             amc_vendor: a.amc_vendor || null,
-            amc_expiry: a.amc_expiry ? a.amc_expiry.slice(0, 10) : null,
+            amc_expiry: toSafeDateStr(a.amc_expiry),
             manufacturer: a.manufacturer || null,
             asset_count: 1,
             last_used: a.created_at || new Date().toISOString(),
@@ -4699,11 +4716,11 @@ export async function getAssetFormSuggestions(): Promise<AssetFormSuggestions> {
       po_number: String(r.po_number || '').trim().toUpperCase(),
       vendor_name: r.vendor_name ? String(r.vendor_name).trim().toUpperCase() : null,
       invoice_number: r.invoice_number ? String(r.invoice_number).trim().toUpperCase() : null,
-      invoice_date: r.invoice_date ? String(r.invoice_date).slice(0, 10) : null,
-      purchase_date: r.purchase_date ? String(r.purchase_date).slice(0, 10) : null,
-      warranty_expiry: r.warranty_expiry ? String(r.warranty_expiry).slice(0, 10) : null,
+      invoice_date: toSafeDateStr(r.invoice_date),
+      purchase_date: toSafeDateStr(r.purchase_date),
+      warranty_expiry: toSafeDateStr(r.warranty_expiry),
       amc_vendor: r.amc_vendor ? String(r.amc_vendor).trim().toUpperCase() : null,
-      amc_expiry: r.amc_expiry ? String(r.amc_expiry).slice(0, 10) : null,
+      amc_expiry: toSafeDateStr(r.amc_expiry),
       manufacturer: r.manufacturer ? String(r.manufacturer).trim().toUpperCase() : null,
       asset_count: Number(r.asset_count || 1),
       last_used: r.last_used ? String(r.last_used) : new Date().toISOString(),
