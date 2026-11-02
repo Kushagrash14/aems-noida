@@ -77,6 +77,15 @@ interface ParsedImportRow {
   mac_address?: string;
   ip_address?: string;
 
+  // Historical Lifecycle & Condition (Pre-AEMS Legacy Status)
+  condition?: string;
+  lifecycle_status?: string;
+  assigned_date?: string;
+  exact_location?: string;
+  amc_vendor?: string;
+  amc_expiry?: string;
+  past_service_history?: string;
+
   // Analysis flags
   status: 'valid' | 'warning' | 'error';
   statusMessages: string[];
@@ -297,6 +306,10 @@ export default function SmartAssetImportModal({
           'Model': '21AH00BUIN',
           'Serial Number': 'PF3XA001',
           'Asset Code (According to SAP)': 'SAP-1002394',
+          'Asset Condition (New / Existing / Refurbished)': 'Existing Asset (In Use)',
+          'Current Lifecycle Status (Active / In Stock / Repair / Damaged)': 'Active / In Service',
+          'Deployed / In-Service Date (YYYY-MM-DD)': '2023-04-10',
+          'Exact Location / Desk / Room': 'Floor 2, Cubicle 204',
           'Processor / CPU': 'Intel Core i7-12700H',
           'RAM Memory': '16 GB DDR4',
           'Storage Capacity': '512 GB NVMe SSD',
@@ -304,13 +317,16 @@ export default function SmartAssetImportModal({
           'Hostname': 'PGEL-HQ-L042',
           'MAC Address': '00:1A:2B:3C:4D:5E',
           'IP Address': '192.168.1.105',
-          'Purchase Date (YYYY-MM-DD)': '2024-03-15',
+          'Purchase Date (YYYY-MM-DD)': '2023-03-15',
           'Purchase Cost (INR)': 78500,
           'Vendor Name': 'Redington India Ltd',
-          'PO Number': 'PO-2024-0012',
-          'Invoice Number (Optional)': 'INV-2024-0012',
-          'Invoice Date (Optional)': '2024-03-15',
-          'Warranty Expiry (YYYY-MM-DD)': '2027-03-14',
+          'PO Number': 'PO-2023-0012',
+          'Invoice Number (Optional)': 'INV-2023-0012',
+          'Invoice Date (Optional)': '2023-03-15',
+          'Warranty Expiry (YYYY-MM-DD)': '2026-03-14',
+          'AMC Vendor (Optional)': '',
+          'AMC Expiry Date (Optional)': '',
+          'Past Service & Maintenance History': 'Screen replaced under warranty in Dec 2023. RAM upgraded.',
           'Employee Code (Optional)': 'PG-1001',
           'Employee Full Name (Optional)': 'AMIT SHARMA',
           'Employee Email (Optional)': 'amit.sharma@pgel.in',
@@ -325,6 +341,10 @@ export default function SmartAssetImportModal({
           'Model': 'OptiPlex 7090 MT',
           'Serial Number': 'DL901234',
           'Asset Code (According to SAP)': 'SAP-1002395',
+          'Asset Condition (New / Existing / Refurbished)': 'Existing Asset (In Use)',
+          'Current Lifecycle Status (Active / In Stock / Repair / Damaged)': 'Active / In Service',
+          'Deployed / In-Service Date (YYYY-MM-DD)': '2022-06-15',
+          'Exact Location / Desk / Room': 'Finance Dept, Desk 12',
           'Processor / CPU': 'Intel Core i5-11500',
           'RAM Memory': '16 GB DDR4',
           'Storage Capacity': '1 TB SSD',
@@ -332,19 +352,22 @@ export default function SmartAssetImportModal({
           'Hostname': 'PGEL-HQ-D018',
           'MAC Address': '00:1A:2B:3C:4D:5F',
           'IP Address': '192.168.1.106',
-          'Purchase Date (YYYY-MM-DD)': '2024-01-20',
+          'Purchase Date (YYYY-MM-DD)': '2022-01-20',
           'Purchase Cost (INR)': 62000,
           'Vendor Name': 'Compucom Systems',
-          'PO Number': 'PO-2024-0044',
-          'Invoice Number (Optional)': 'INV-2024-0044',
-          'Invoice Date (Optional)': '2024-01-20',
-          'Warranty Expiry (YYYY-MM-DD)': '2027-01-19',
+          'PO Number': 'PO-2022-0044',
+          'Invoice Number (Optional)': 'INV-2022-0044',
+          'Invoice Date (Optional)': '2022-01-20',
+          'Warranty Expiry (YYYY-MM-DD)': '2025-01-19',
+          'AMC Vendor (Optional)': 'Wipro IT Care Services',
+          'AMC Expiry Date (Optional)': '2026-01-18',
+          'Past Service & Maintenance History': 'SMPS replaced in June 2024 by Wipro AMC engineer',
           'Employee Code (Optional)': 'PG-1002',
           'Employee Full Name (Optional)': 'PRIYA PATEL',
           'Employee Email (Optional)': 'priya.patel@pgel.in',
           'Employee Phone (Optional)': '9876543211',
           'Employee Designation (Optional)': 'UI/UX Lead',
-          'Remarks (Optional)': 'Design Workstation with Dual Monitor Setup',
+          'Remarks (Optional)': 'Out of OEM warranty, covered under annual AMC contract',
         },
         {
           'Asset Name': 'Dell 24-inch FHD Monitor P2422H',
@@ -353,6 +376,10 @@ export default function SmartAssetImportModal({
           'Model': 'P2422H',
           'Serial Number': 'CN-0M3817',
           'Asset Code (According to SAP)': 'SAP-1002396',
+          'Asset Condition (New / Existing / Refurbished)': 'New Purchase',
+          'Current Lifecycle Status (Active / In Stock / Repair / Damaged)': 'In Stock / Available',
+          'Deployed / In-Service Date (YYYY-MM-DD)': '',
+          'Exact Location / Desk / Room': 'IT Store Room, Rack B3',
           'Processor / CPU': '',
           'RAM Memory': '',
           'Storage Capacity': '',
@@ -367,12 +394,15 @@ export default function SmartAssetImportModal({
           'Invoice Number (Optional)': 'INV-2024-0062',
           'Invoice Date (Optional)': '2024-02-10',
           'Warranty Expiry (YYYY-MM-DD)': '2027-02-09',
+          'AMC Vendor (Optional)': '',
+          'AMC Expiry Date (Optional)': '',
+          'Past Service & Maintenance History': 'Brand new unboxed spare unit in store',
           'Employee Code (Optional)': '',
           'Employee Full Name (Optional)': '',
           'Employee Email (Optional)': '',
           'Employee Phone (Optional)': '',
           'Employee Designation (Optional)': '',
-          'Remarks (Optional)': 'Direct Stock pool reserve for emergency swap',
+          'Remarks (Optional)': 'Buffer inventory for new joinees or emergency replacement',
         },
       ];
     } else if (cleanDept.includes('PRODUCTION') || cleanDept.includes('ASSEMBLY')) {
@@ -586,6 +616,16 @@ export default function SmartAssetImportModal({
         const invoice_number = getVal([/^invoice.*number/i, /^invoice.*no/i, /^inv.*no/i, /^invoice$/i]);
         const invoice_date = getVal([/^invoice.*date/i, /^bill.*date/i]);
         const warranty_expiry = getVal([/^warranty.*expiry/i, /^warranty/i]);
+
+        // Historical Lifecycle, Support & Condition Fields (Pre-AEMS Legacy Status)
+        const condition = getVal([/^condition/i, /^asset.*condition/i, /^procurement.*type/i]);
+        const lifecycle_status = getVal([/^status/i, /^lifecycle/i, /^operational.*status/i]);
+        const assigned_date = getVal([/^assigned.*date/i, /^deployed.*date/i, /^in.*service.*date/i, /^deployed.*since/i]);
+        const exact_location = getVal([/^exact.*location/i, /^location.*detail/i, /^desk/i, /^room/i, /^cubicle/i, /^floor/i]);
+        const amc_vendor = getVal([/^amc.*vendor/i, /^amc.*provider/i, /^amc.*company/i]);
+        const amc_expiry = getVal([/^amc.*expiry/i, /^amc.*date/i, /^amc.*end/i]);
+        const past_service_history = getVal([/^past.*service/i, /^service.*history/i, /^repair.*history/i, /^maintenance.*history/i, /^history.*notes/i]);
+
         const emp_code = getVal([/^emp.*code/i, /^employee.*code/i, /^emp.*id/i, /^custodian.*code/i]);
         const emp_name = getVal([/^emp.*name/i, /^employee.*name/i, /^custodian.*name/i, /^full.*name/i]);
         const emp_email = getVal([/^emp.*email/i, /^employee.*email/i, /^email$/i]);
@@ -684,6 +724,13 @@ export default function SmartAssetImportModal({
           operating_system,
           mac_address,
           ip_address,
+          condition: condition || undefined,
+          lifecycle_status: lifecycle_status || undefined,
+          assigned_date: assigned_date || undefined,
+          exact_location: exact_location || undefined,
+          amc_vendor: amc_vendor || undefined,
+          amc_expiry: amc_expiry || undefined,
+          past_service_history: past_service_history || undefined,
           status,
           statusMessages,
           willCreateEmployee,
@@ -762,6 +809,13 @@ export default function SmartAssetImportModal({
         operating_system: r.operating_system,
         mac_address: r.mac_address,
         ip_address: r.ip_address,
+        condition: r.condition,
+        lifecycle_status: r.lifecycle_status,
+        assigned_date: r.assigned_date,
+        exact_location: r.exact_location,
+        amc_vendor: r.amc_vendor,
+        amc_expiry: r.amc_expiry,
+        past_service_history: r.past_service_history,
       }));
 
       const res = await fetch('/api/assets/import', {

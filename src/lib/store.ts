@@ -4264,6 +4264,13 @@ export interface BatchImportAssetItem {
   invoice_number?: string;
   invoice_date?: string;
   warranty_expiry?: string;
+  amc_vendor?: string;
+  amc_expiry?: string;
+  condition?: string;
+  lifecycle_status?: string;
+  assigned_date?: string;
+  exact_location?: string;
+  past_service_history?: string;
   remarks?: string;
   emp_code?: string;
   emp_name?: string;
@@ -4455,7 +4462,28 @@ export async function batchImportAssets(
     let assignedTag = await generateUniqueAssetTag(catId, itAssetType);
     const assetId = crypto.randomUUID();
 
-    const assetStatus = assignedEmployeeId ? ('in_service' as const) : ('in_storage' as const);
+    // Determine lifecycle status from Excel column or assignment
+    let assetStatus: AssetStatus = assignedEmployeeId ? ('in_service' as const) : ('in_storage' as const);
+    if (item.lifecycle_status) {
+      const ls = item.lifecycle_status.toLowerCase().trim();
+      if (ls.includes('maint') || ls.includes('repair')) assetStatus = 'maintenance';
+      else if (ls.includes('damage') || ls.includes('broken') || ls.includes('defect')) assetStatus = 'damaged';
+      else if (ls.includes('scrap') || ls.includes('waste')) assetStatus = 'scrapped';
+      else if (ls.includes('miss') || ls.includes('lost')) assetStatus = 'missing';
+      else if (ls.includes('stock') || ls.includes('storage') || ls.includes('avail') || ls.includes('buffer')) assetStatus = 'in_storage';
+      else if (ls.includes('service') || ls.includes('active') || ls.includes('assign')) assetStatus = 'in_service';
+    }
+
+    // Determine condition (default to existing_asset for legacy migration)
+    let assetCondition = 'existing_asset';
+    if (item.condition) {
+      const c = item.condition.toLowerCase().trim();
+      if (c.includes('new')) assetCondition = 'new_purchase';
+      else if (c.includes('refurb')) assetCondition = 'refurbished';
+      else assetCondition = 'existing_asset';
+    } else if (item.po_number?.trim()) {
+      assetCondition = 'new_purchase';
+    }
 
     const docMetadata = JSON.stringify({
       hostname: item.hostname?.trim().toUpperCase() || null,
@@ -4475,7 +4503,10 @@ export async function batchImportAssets(
       photos: [],
       documents: [],
       imported_at: now,
-      condition: item.po_number?.trim() ? 'new_purchase' : 'existing_asset',
+      condition: assetCondition,
+      exact_location: item.exact_location?.trim().toUpperCase() || null,
+      assigned_date: item.assigned_date || null,
+      past_service_history: item.past_service_history?.trim() || null,
     });
 
     const newAssetObj: Asset = {
@@ -4494,27 +4525,29 @@ export async function batchImportAssets(
       invoice_date: item.invoice_date || null,
       vendor_name: item.vendor_name?.trim().toUpperCase() || null,
       warranty_expiry: item.warranty_expiry || null,
+      amc_vendor: item.amc_vendor?.trim().toUpperCase() || null,
+      amc_expiry: item.amc_expiry || null,
       current_location_id: location_id,
       current_plant_id: plant_id,
       current_department_id: department_id,
-      assigned_employee_id: assignedEmployeeId,
+      assigned_employee_id: assetStatus === 'in_service' ? assignedEmployeeId : null,
       status: assetStatus,
       invoice_document_path: docMetadata,
       is_deleted: false,
       created_by: userId,
-      created_at: now,
+      created_at: item.purchase_date ? (new Date(item.purchase_date).toISOString() || now) : now,
       updated_at: now,
     };
 
     if (env.isMockMode) {
       memory.assets.unshift(newAssetObj);
-      if (assignedEmployeeId) {
+      if (assignedEmployeeId && assetStatus === 'in_service') {
         await openAssignment({
           assetId,
           employeeId: assignedEmployeeId,
           assignedBy: userId,
           remarks: item.remarks?.trim() || 'Batch Excel Assignment',
-          at: now,
+          at: item.assigned_date || now,
         });
       }
     } else {
@@ -4554,14 +4587,14 @@ export async function batchImportAssets(
         continue;
       }
 
-      if (assignedEmployeeId) {
+      if (assignedEmployeeId && assetStatus === 'in_service') {
         try {
           await openAssignment({
             assetId,
             employeeId: assignedEmployeeId,
             assignedBy: userId,
             remarks: item.remarks?.trim() || 'Batch Excel Assignment',
-            at: now,
+            at: item.assigned_date || now,
           });
         } catch (assignErr) {
           console.warn(`Failed to log asset_assignment record for ${assignedTag}:`, assignErr);
