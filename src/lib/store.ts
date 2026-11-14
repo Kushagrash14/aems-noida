@@ -676,12 +676,62 @@ export async function createCategory(cat: Omit<Category, 'id' | 'created_at' | '
 }
 
 export async function resolveCategoryIdByName(categoryName: string | null | undefined): Promise<string | null> {
-  const cleanName = (categoryName || '').trim().toUpperCase();
+  let cleanName = (categoryName || '').trim().toUpperCase();
   if (!cleanName) return null;
+
+  // Canonical synonym normalization for enterprise IT asset types
+  const SYNONYMS: Record<string, string> = {
+    'KEYBOARD': 'KEYBOARD',
+    'MOUSE': 'MOUSE',
+    'RAM': 'RAM',
+    'MEMORY': 'RAM',
+    'HARD DISK': 'HARD DISK',
+    'HDD': 'HARD DISK',
+    'SSD': 'HARD DISK',
+    'SWITCH': 'NETWORK SWITCH',
+    'SWITCH WITH PORT': 'NETWORK SWITCH',
+    'NETWORK SWITCH': 'NETWORK SWITCH',
+    'POE SWITCH': 'POE SWITCH',
+    'RACK': 'SERVER / NETWORK RACK',
+    'SERVER RACK': 'SERVER / NETWORK RACK',
+    'NETWORK RACK': 'SERVER / NETWORK RACK',
+    'LAN WIRE': 'LAN CABLE / WIRE',
+    'LAN WIRE WITH BRAND': 'LAN CABLE / WIRE',
+    'LAN CABLE': 'LAN CABLE / WIRE',
+    'CABLE': 'LAN CABLE / WIRE',
+    'LED': 'LED TV / DISPLAY',
+    'LED WITH DEFINE INCH BRAND': 'LED TV / DISPLAY',
+    'LED DISPLAY': 'LED TV / DISPLAY',
+    'LED TV': 'LED TV / DISPLAY',
+    'TELEPHONE': 'TELEPHONE / IP PHONE',
+    'IP PHONE': 'TELEPHONE / IP PHONE',
+    'INTERCOM': 'TELEPHONE / IP PHONE',
+    'FACE MACHINE': 'FACE ATTENDANCE MACHINE',
+    'BIOMETRIC': 'FACE ATTENDANCE MACHINE',
+    'BIOMETRIC MACHINE': 'FACE ATTENDANCE MACHINE',
+    'PEN DRIVE': 'PEN DRIVE / USB STORAGE',
+    'PEN DRIVE WITH BRAND AND STORAGE': 'PEN DRIVE / USB STORAGE',
+    'USB DRIVE': 'PEN DRIVE / USB STORAGE',
+    'PENDRIVE': 'PEN DRIVE / USB STORAGE',
+    'ADAPTOR': 'CHARGER / ADAPTER',
+    'ADAPTER': 'CHARGER / ADAPTER',
+    'CHARGER': 'CHARGER / ADAPTER',
+    'TONER': 'TONER / CARTRIDGE',
+    'CARTRIDGE': 'TONER / CARTRIDGE',
+    'PRINTER TONER': 'TONER / CARTRIDGE',
+  };
+
+  if (SYNONYMS[cleanName]) {
+    cleanName = SYNONYMS[cleanName];
+  }
 
   const all = await getCategories();
   const matched = all.find(
-    (c) => c.name.trim().toUpperCase() === cleanName || c.code.trim().toUpperCase() === cleanName
+    (c) =>
+      c.name.trim().toUpperCase() === cleanName ||
+      c.code.trim().toUpperCase() === cleanName ||
+      c.name.trim().toUpperCase().includes(cleanName) ||
+      cleanName.includes(c.name.trim().toUpperCase())
   );
   if (matched) return matched.id;
 
@@ -4273,6 +4323,9 @@ export interface BatchImportAssetItem {
   plant_name?: string;
   location_name?: string;
   past_service_history?: string;
+  specifications?: string;
+  interface_type?: string;
+  compatible_device?: string;
   remarks?: string;
   emp_code?: string;
   emp_name?: string;
@@ -4562,6 +4615,9 @@ export async function batchImportAssets(
         hostname: item.hostname?.trim().toUpperCase() || null,
         mac_address: item.mac_address?.trim().toUpperCase() || null,
         ip_address: item.ip_address?.trim().toUpperCase() || null,
+        specifications: item.specifications?.trim() || null,
+        interface_type: item.interface_type?.trim() || null,
+        compatible_device: item.compatible_device?.trim() || null,
       },
       sap_asset_code: item.sap_asset_code?.trim().toUpperCase() || null,
       invoice_number: item.invoice_number?.trim().toUpperCase() || null,

@@ -90,6 +90,11 @@ interface ParsedImportRow {
   plant_name?: string;
   location_name?: string;
 
+  // Multi-Category Hardware Specs (For Network, Display, Peripherals, Components)
+  specifications?: string;
+  interface_type?: string;
+  compatible_device?: string;
+
   // Analysis flags
   status: 'valid' | 'warning' | 'error';
   statusMessages: string[];
@@ -315,6 +320,8 @@ export default function SmartAssetImportModal({
           'Deployed / In-Service Date (YYYY-MM-DD)': '2023-04-10',
           'Plant Code (e.g. 2060) (Optional)': '2060',
           'Exact Location / Desk / Room': 'Floor 2, Cubicle 204',
+          'Specifications / Size / Capacity': 'Intel Core i7-12700H, 16GB DDR4, 512GB NVMe SSD',
+          'Interface / Connectivity / Type': 'Wi-Fi 6E, Bluetooth 5.2, USB Type-C Thunderbolt',
           'Processor / CPU': 'Intel Core i7-12700H',
           'RAM Memory': '16 GB DDR4',
           'Storage Capacity': '512 GB NVMe SSD',
@@ -349,8 +356,10 @@ export default function SmartAssetImportModal({
           'Asset Condition (New / Existing / Refurbished)': 'Existing Asset (In Use)',
           'Current Lifecycle Status (Active / In Stock / Repair / Damaged)': 'Active / In Service',
           'Deployed / In-Service Date (YYYY-MM-DD)': '2022-06-15',
-          'Plant Code (e.g. 2060) (Optional)': '2040',
+          'Plant Code (e.g. 2060) (Optional)': '2060',
           'Exact Location / Desk / Room': 'Finance Dept, Desk 12',
+          'Specifications / Size / Capacity': 'Intel Core i5-11500, 16GB DDR4, 1TB SSD',
+          'Interface / Connectivity / Type': 'Gigabit Ethernet, Dual DisplayPort',
           'Processor / CPU': 'Intel Core i5-11500',
           'RAM Memory': '16 GB DDR4',
           'Storage Capacity': '1 TB SSD',
@@ -387,6 +396,8 @@ export default function SmartAssetImportModal({
           'Deployed / In-Service Date (YYYY-MM-DD)': '',
           'Plant Code (e.g. 2060) (Optional)': '2060',
           'Exact Location / Desk / Room': 'IT Store Room, Rack B3',
+          'Specifications / Size / Capacity': '24 Inch IPS Panel, 1920 x 1080 FHD, 60Hz',
+          'Interface / Connectivity / Type': 'HDMI 1.4, DisplayPort 1.2, VGA, USB 3.2 Hub',
           'Processor / CPU': '',
           'RAM Memory': '',
           'Storage Capacity': '',
@@ -636,6 +647,33 @@ export default function SmartAssetImportModal({
         const amc_expiry = getVal([/^amc.*expiry/i, /^amc.*date/i, /^amc.*end/i]);
         const past_service_history = getVal([/^past.*service/i, /^service.*history/i, /^repair.*history/i, /^maintenance.*history/i, /^history.*notes/i]);
 
+        // Multi-Category Hardware Specifications & Interfacing
+        const specifications = getVal([
+          /^spec/i,
+          /^primary.*spec/i,
+          /^size/i,
+          /^capacity/i,
+          /^inch/i,
+          /^port/i,
+          /^details/i,
+          /^rating/i,
+        ]);
+        const interface_type = getVal([
+          /^interface/i,
+          /^connectivity/i,
+          /^connection/i,
+          /^pin.*type/i,
+          /^wire/i,
+          /^cable.*type/i,
+        ]);
+        const compatible_device = getVal([
+          /^compatible/i,
+          /^compatibility/i,
+          /^host.*device/i,
+          /^used.*for/i,
+          /^for.*model/i,
+        ]);
+
         const emp_code = getVal([/^emp.*code/i, /^employee.*code/i, /^emp.*id/i, /^custodian.*code/i]);
         const emp_name = getVal([/^emp.*name/i, /^employee.*name/i, /^custodian.*name/i, /^full.*name/i]);
         const emp_email = getVal([/^emp.*email/i, /^employee.*email/i, /^email$/i]);
@@ -744,6 +782,9 @@ export default function SmartAssetImportModal({
           exact_location: exact_location || undefined,
           plant_name: plant_name || undefined,
           location_name: location_name || undefined,
+          specifications: specifications || undefined,
+          interface_type: interface_type || undefined,
+          compatible_device: compatible_device || undefined,
           amc_vendor: amc_vendor || undefined,
           amc_expiry: amc_expiry || undefined,
           past_service_history: past_service_history || undefined,
@@ -831,6 +872,9 @@ export default function SmartAssetImportModal({
         exact_location: r.exact_location,
         plant_name: r.plant_name,
         location_name: r.location_name,
+        specifications: r.specifications,
+        interface_type: r.interface_type,
+        compatible_device: r.compatible_device,
         amc_vendor: r.amc_vendor,
         amc_expiry: r.amc_expiry,
         past_service_history: r.past_service_history,
@@ -1319,9 +1363,9 @@ export default function SmartAssetImportModal({
                                 <p className="text-[9px] text-slate-400">
                                   {[row.category_name, row.manufacturer, row.model].filter(Boolean).join(' • ')}
                                 </p>
-                                {[row.processor, row.ram, row.storage].filter(Boolean).length > 0 && (
+                                {[row.processor, row.ram, row.storage, row.specifications, row.interface_type].filter(Boolean).length > 0 && (
                                   <p className="text-[8.5px] font-mono font-semibold text-blue-600 bg-blue-50 px-1 py-0.5 rounded mt-0.5 inline-block">
-                                    {[row.processor, row.ram, row.storage].filter(Boolean).join(' • ')}
+                                    {[row.processor, row.ram, row.storage, row.specifications, row.interface_type].filter(Boolean).join(' • ')}
                                   </p>
                                 )}
                                 {row.plant_name && (
