@@ -313,7 +313,7 @@ export default function SmartAssetImportModal({
           'Asset Condition (New / Existing / Refurbished)': 'Existing Asset (In Use)',
           'Current Lifecycle Status (Active / In Stock / Repair / Damaged)': 'Active / In Service',
           'Deployed / In-Service Date (YYYY-MM-DD)': '2023-04-10',
-          'Plant / Unit (Optional)': 'Unit 1',
+          'Plant Code (e.g. 2060) (Optional)': '2060',
           'Exact Location / Desk / Room': 'Floor 2, Cubicle 204',
           'Processor / CPU': 'Intel Core i7-12700H',
           'RAM Memory': '16 GB DDR4',
@@ -349,7 +349,7 @@ export default function SmartAssetImportModal({
           'Asset Condition (New / Existing / Refurbished)': 'Existing Asset (In Use)',
           'Current Lifecycle Status (Active / In Stock / Repair / Damaged)': 'Active / In Service',
           'Deployed / In-Service Date (YYYY-MM-DD)': '2022-06-15',
-          'Plant / Unit (Optional)': 'Unit 2',
+          'Plant Code (e.g. 2060) (Optional)': '2040',
           'Exact Location / Desk / Room': 'Finance Dept, Desk 12',
           'Processor / CPU': 'Intel Core i5-11500',
           'RAM Memory': '16 GB DDR4',
@@ -385,7 +385,7 @@ export default function SmartAssetImportModal({
           'Asset Condition (New / Existing / Refurbished)': 'New Purchase',
           'Current Lifecycle Status (Active / In Stock / Repair / Damaged)': 'In Stock / Available',
           'Deployed / In-Service Date (YYYY-MM-DD)': '',
-          'Plant / Unit (Optional)': 'Unit 1',
+          'Plant Code (e.g. 2060) (Optional)': '2060',
           'Exact Location / Desk / Room': 'IT Store Room, Rack B3',
           'Processor / CPU': '',
           'RAM Memory': '',
@@ -499,7 +499,7 @@ export default function SmartAssetImportModal({
       ['RULE 5: Inactive Employee Safety', 'If an employee code belongs to an inactive or resigned staff member, the asset will safely route to "In Stock".'],
       ['RULE 6: Unassigned to Stock', 'If Employee Code is left blank, the asset is automatically added directly to the "In Stock" available pool.'],
       ['RULE 7: Invoices & Photos', 'Physical asset photos, invoices, and warranty documents can be uploaded anytime via the "Edit Asset" screen.'],
-      ['RULE 8: Plant / Unit Assignment', 'If "Plant / Unit (Optional)" is provided (e.g. Unit 1, Unit 2, Plant 3), the asset and employee will be assigned directly to that Plant. If left blank, it automatically defaults to the Plant selected in the top dropdown of the modal.'],
+      ['RULE 8: Plant Code Routing', 'If "Plant Code (e.g. 2060)" is provided (e.g. 2060, 2040, 2010), the asset and employee are mapped directly to that Plant! If left blank, it automatically defaults to the Plant selected in the top dropdown of the modal.'],
     ];
     const wsGuide = XLSX.utils.aoa_to_sheet(guidelines);
     wsGuide['!cols'] = [{ wch: 35 }, { wch: 75 }];
@@ -630,7 +630,7 @@ export default function SmartAssetImportModal({
         const lifecycle_status = getVal([/^status/i, /^lifecycle/i, /^operational.*status/i]);
         const assigned_date = getVal([/^assigned.*date/i, /^deployed.*date/i, /^in.*service.*date/i, /^deployed.*since/i]);
         const exact_location = getVal([/^exact.*location/i, /^location.*detail/i, /^desk/i, /^room/i, /^cubicle/i, /^floor/i]);
-        const plant_name = getVal([/^plant/i, /^unit/i, /^factory/i]);
+        const plant_name = getVal([/^plant.*code/i, /^unit.*code/i, /^plant.*unit/i, /^plant/i, /^unit/i, /^factory/i]);
         const location_name = getVal([/^location$/i, /^site/i, /^city/i]);
         const amc_vendor = getVal([/^amc.*vendor/i, /^amc.*provider/i, /^amc.*company/i]);
         const amc_expiry = getVal([/^amc.*expiry/i, /^amc.*date/i, /^amc.*end/i]);
@@ -707,7 +707,7 @@ export default function SmartAssetImportModal({
         }
 
         if (plant_name) {
-          statusMessages.push(`Plant Target: ${plant_name}`);
+          statusMessages.push(`Plant Target: Code [${plant_name}]`);
         }
 
         analyzed.push({

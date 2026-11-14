@@ -4397,26 +4397,54 @@ export async function batchImportAssets(
 
     const { id: catId, typeStr: catTypeStr } = await resolveCategoryId(item.category_name);
 
-    // Resolve Plant & Location (Row-level from Excel or fallback to batch selection)
-    let rowPlantId = plant_id;
+    // 1. Resolve Location first (Row-level from Excel or fallback to batch selection)
     let rowLocationId = location_id;
-    if (item.plant_name?.trim()) {
-      const cleanPlantStr = item.plant_name.trim().toUpperCase();
-      const matchedPlant = allPlants.find(
-        (p) => p.name.toUpperCase() === cleanPlantStr || p.code.toUpperCase() === cleanPlantStr || p.name.toUpperCase().includes(cleanPlantStr)
-      );
-      if (matchedPlant) {
-        rowPlantId = matchedPlant.id;
-        rowLocationId = matchedPlant.location_id || location_id;
-      }
-    }
     if (item.location_name?.trim()) {
       const cleanLocStr = item.location_name.trim().toUpperCase();
       const matchedLoc = allLocations.find(
-        (l) => l.name.toUpperCase() === cleanLocStr || l.code.toUpperCase() === cleanLocStr || l.name.toUpperCase().includes(cleanLocStr)
+        (l) =>
+          l.name.toUpperCase() === cleanLocStr ||
+          l.code.toUpperCase() === cleanLocStr ||
+          l.name.toUpperCase().includes(cleanLocStr) ||
+          l.code.toUpperCase().includes(cleanLocStr)
       );
       if (matchedLoc) {
         rowLocationId = matchedLoc.id;
+      }
+    }
+
+    // 2. Resolve Plant by Plant Code (e.g. "2060", "2040") or Name
+    let rowPlantId = plant_id;
+    if (item.plant_name?.trim()) {
+      const cleanPlantStr = item.plant_name.trim().toUpperCase();
+      const cleanAlphaNum = cleanPlantStr.replace(/[^A-Z0-9]/g, '');
+      let matchedPlant = allPlants.find(
+        (p) =>
+          p.code.toUpperCase() === cleanPlantStr ||
+          p.code.toUpperCase().replace(/[^A-Z0-9]/g, '') === cleanAlphaNum ||
+          p.name.toUpperCase() === cleanPlantStr ||
+          p.name.toUpperCase().replace(/[^A-Z0-9]/g, '') === cleanAlphaNum ||
+          p.name.toUpperCase().includes(cleanPlantStr) ||
+          cleanPlantStr.includes(p.code.toUpperCase())
+      );
+
+      // If plant code does not exist yet (e.g. brand new plant 2060), auto-create seamlessly!
+      if (!matchedPlant) {
+        try {
+          matchedPlant = await createPlant({
+            location_id: rowLocationId,
+            name: cleanPlantStr.startsWith('PLANT') || cleanPlantStr.startsWith('UNIT') ? cleanPlantStr : `Plant ${cleanPlantStr}`,
+            code: cleanPlantStr,
+          });
+          allPlants.push(matchedPlant);
+        } catch (e) {
+          console.warn('Could not auto-create plant for code:', cleanPlantStr, e);
+        }
+      }
+
+      if (matchedPlant) {
+        rowPlantId = matchedPlant.id;
+        rowLocationId = matchedPlant.location_id || rowLocationId;
       }
     }
 
