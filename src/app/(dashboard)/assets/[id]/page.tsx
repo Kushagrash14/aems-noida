@@ -410,6 +410,7 @@ function AssetDetailContent() {
   // Dynamic Specs extraction (from custom_values or parsed metadata specs)
   const specs: Record<string, any> = {
     ...((asset as any).specs || {}),
+    ...(parsedMeta?.specs || {}),
     ...((Array.isArray(asset.custom_values)
       ? asset.custom_values.reduce((acc: Record<string, string>, cv: any) => {
           const k = (cv.field?.field_name || cv.field_id || '').toLowerCase();
@@ -941,50 +942,91 @@ function AssetDetailContent() {
         </div>
 
         {/* =================================================================== */}
-        {/* SECTION 2: NETWORK & TECH SPECIFICATIONS                           */}
+        {/* SECTION 2: HARDWARE & TECH SPECIFICATIONS                           */}
         {/* =================================================================== */}
         <div className="space-y-4 pt-4 border-t border-slate-100">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
             <Cpu className="w-3.5 h-3.5 text-blue-600" />
-            <span>NETWORK &amp; TECH SPECIFICATIONS</span>
+            <span>HARDWARE &amp; TECH SPECIFICATIONS</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-8 text-xs">
-            <div>
-              <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                CPU / PROCESSOR
-              </span>
-              <span className="font-black text-slate-900 text-sm uppercase">
-                {specs.processor || specs.cpu || 'INTEL CORE I7-13700H'}
-              </span>
-            </div>
+            {specs.specifications && (
+              <div className="sm:col-span-2 p-3 bg-blue-50/60 border border-blue-200/80 rounded-xl">
+                <span className="block text-[10px] font-extrabold text-blue-700 uppercase tracking-wider">
+                  SPECIFICATIONS / CAPACITY / SIZE
+                </span>
+                <span className="font-black text-slate-900 text-sm mt-0.5 block">
+                  {specs.specifications}
+                </span>
+              </div>
+            )}
 
-            <div>
-              <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                RAM
-              </span>
-              <span className="font-black text-slate-900 text-sm uppercase">
-                {specs.ram_size || specs.ram || '16 GB'}
-              </span>
-            </div>
+            {specs.interface_type && (
+              <div>
+                <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                  INTERFACE / PORTS / CONNECTIVITY
+                </span>
+                <span className="font-black text-slate-900 text-sm">
+                  {specs.interface_type}
+                </span>
+              </div>
+            )}
 
-            <div>
-              <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                STORAGE (SSD)
-              </span>
-              <span className="font-black text-slate-900 text-sm uppercase">
-                {specs.storage_capacity || specs.storage || '512 GB SSD'}
-              </span>
-            </div>
+            {specs.compatible_device && (
+              <div>
+                <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                  COMPATIBLE DEVICE / HOST PAIRING
+                </span>
+                <span className="font-black text-slate-900 text-sm">
+                  {specs.compatible_device}
+                </span>
+              </div>
+            )}
 
-            <div>
-              <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                WINDOWS VERSION / OS
-              </span>
-              <span className="font-black text-slate-900 text-sm uppercase">
-                {specs.operating_system || specs.os || 'Windows 11 Pro'}
-              </span>
-            </div>
+            {(specs.processor || specs.cpu) && (
+              <div>
+                <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                  CPU / PROCESSOR
+                </span>
+                <span className="font-black text-slate-900 text-sm uppercase">
+                  {specs.processor || specs.cpu}
+                </span>
+              </div>
+            )}
+
+            {(specs.ram_size || specs.ram) && (
+              <div>
+                <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                  RAM
+                </span>
+                <span className="font-black text-slate-900 text-sm uppercase">
+                  {specs.ram_size || specs.ram}
+                </span>
+              </div>
+            )}
+
+            {(specs.storage_capacity || specs.storage) && (
+              <div>
+                <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                  STORAGE (SSD / HDD)
+                </span>
+                <span className="font-black text-slate-900 text-sm uppercase">
+                  {specs.storage_capacity || specs.storage}
+                </span>
+              </div>
+            )}
+
+            {(specs.operating_system || specs.os) && (
+              <div>
+                <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                  WINDOWS VERSION / OS
+                </span>
+                <span className="font-black text-slate-900 text-sm uppercase">
+                  {specs.operating_system || specs.os}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

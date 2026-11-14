@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Layers, ChevronDown, ChevronUp, Box, Laptop, Cpu, Wrench } from 'lucide-react';
+import { Layers, ChevronDown, ChevronUp, Box, Laptop, Cpu, Wrench, Network, Server, Tv, Printer, HardDrive } from 'lucide-react';
 
 export interface CategoryStatItem {
   id: string;
@@ -20,19 +20,17 @@ export default function CategorySummary({ stats }: CategorySummaryProps) {
   const [isOpen, setIsOpen] = useState(true);
 
   const getCategoryIcon = (code?: string) => {
-    switch (code?.toLowerCase()) {
-      case 'it':
-      case 'laptop':
-        return Laptop;
-      case 'mch':
-      case 'machinery':
-        return Wrench;
-      case 'mold':
-      case 'tool':
-        return Cpu;
-      default:
-        return Box;
-    }
+    const c = code?.toLowerCase() || '';
+    if (c.includes('it') || c.includes('laptop') || c.includes('cpu')) return Laptop;
+    if (c.includes('swt') || c.includes('poe') || c.includes('lan') || c.includes('net')) return Network;
+    if (c.includes('rck') || c.includes('server')) return Server;
+    if (c.includes('led') || c.includes('mon') || c.includes('tv')) return Tv;
+    if (c.includes('tnr') || c.includes('print')) return Printer;
+    if (c.includes('hdd') || c.includes('usb')) return HardDrive;
+    if (c.includes('ram')) return Cpu;
+    if (c.includes('mch') || c.includes('machinery')) return Wrench;
+    if (c.includes('mold') || c.includes('tool')) return Cpu;
+    return Box;
   };
 
   return (

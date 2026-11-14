@@ -34,6 +34,15 @@ import {
   Folder,
   AlertTriangle,
   HelpCircle,
+  Server,
+  Network,
+  Tv,
+  Phone,
+  Scan,
+  Usb,
+  Printer,
+  HardDrive,
+  Cpu,
 } from 'lucide-react';
 
 interface CategoryItem {
@@ -59,6 +68,15 @@ const DEFAULT_DEPARTMENTS: CategoryItem[] = [
 function getCategoryIcon(nameOrIcon: string) {
   const lower = (nameOrIcon || '').toLowerCase();
   if (lower.includes('it') || lower.includes('laptop') || lower.includes('computer')) return Laptop;
+  if (lower.includes('switch') || lower.includes('router') || lower.includes('lan') || lower.includes('cable') || lower.includes('net')) return Network;
+  if (lower.includes('rack') || lower.includes('server')) return Server;
+  if (lower.includes('led') || lower.includes('tv') || lower.includes('display') || lower.includes('screen') || lower.includes('mon')) return Tv;
+  if (lower.includes('phone') || lower.includes('tele') || lower.includes('intercom')) return Phone;
+  if (lower.includes('face') || lower.includes('bio') || lower.includes('scan') || lower.includes('attend')) return Scan;
+  if (lower.includes('usb') || lower.includes('pen') || lower.includes('drive')) return Usb;
+  if (lower.includes('print') || lower.includes('toner') || lower.includes('cartridge')) return Printer;
+  if (lower.includes('hard') || lower.includes('hdd') || lower.includes('ssd')) return HardDrive;
+  if (lower.includes('ram') || lower.includes('memory') || lower.includes('cpu')) return Cpu;
   if (lower.includes('cam') || lower.includes('nvr') || lower.includes('cctv') || lower.includes('sec')) return Video;
   if (lower.includes('qual') || lower.includes('qa')) return ShieldCheck;
   if (lower.includes('elec') || lower.includes('power')) return Zap;
