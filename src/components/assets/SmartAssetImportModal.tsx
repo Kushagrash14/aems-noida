@@ -86,6 +86,10 @@ interface ParsedImportRow {
   amc_expiry?: string;
   past_service_history?: string;
 
+  // Plant & Location Hierarchy Override (Optional per row)
+  plant_name?: string;
+  location_name?: string;
+
   // Analysis flags
   status: 'valid' | 'warning' | 'error';
   statusMessages: string[];
@@ -309,6 +313,7 @@ export default function SmartAssetImportModal({
           'Asset Condition (New / Existing / Refurbished)': 'Existing Asset (In Use)',
           'Current Lifecycle Status (Active / In Stock / Repair / Damaged)': 'Active / In Service',
           'Deployed / In-Service Date (YYYY-MM-DD)': '2023-04-10',
+          'Plant / Unit (Optional)': 'Unit 1',
           'Exact Location / Desk / Room': 'Floor 2, Cubicle 204',
           'Processor / CPU': 'Intel Core i7-12700H',
           'RAM Memory': '16 GB DDR4',
@@ -344,6 +349,7 @@ export default function SmartAssetImportModal({
           'Asset Condition (New / Existing / Refurbished)': 'Existing Asset (In Use)',
           'Current Lifecycle Status (Active / In Stock / Repair / Damaged)': 'Active / In Service',
           'Deployed / In-Service Date (YYYY-MM-DD)': '2022-06-15',
+          'Plant / Unit (Optional)': 'Unit 2',
           'Exact Location / Desk / Room': 'Finance Dept, Desk 12',
           'Processor / CPU': 'Intel Core i5-11500',
           'RAM Memory': '16 GB DDR4',
@@ -379,6 +385,7 @@ export default function SmartAssetImportModal({
           'Asset Condition (New / Existing / Refurbished)': 'New Purchase',
           'Current Lifecycle Status (Active / In Stock / Repair / Damaged)': 'In Stock / Available',
           'Deployed / In-Service Date (YYYY-MM-DD)': '',
+          'Plant / Unit (Optional)': 'Unit 1',
           'Exact Location / Desk / Room': 'IT Store Room, Rack B3',
           'Processor / CPU': '',
           'RAM Memory': '',
@@ -492,6 +499,7 @@ export default function SmartAssetImportModal({
       ['RULE 5: Inactive Employee Safety', 'If an employee code belongs to an inactive or resigned staff member, the asset will safely route to "In Stock".'],
       ['RULE 6: Unassigned to Stock', 'If Employee Code is left blank, the asset is automatically added directly to the "In Stock" available pool.'],
       ['RULE 7: Invoices & Photos', 'Physical asset photos, invoices, and warranty documents can be uploaded anytime via the "Edit Asset" screen.'],
+      ['RULE 8: Plant / Unit Assignment', 'If "Plant / Unit (Optional)" is provided (e.g. Unit 1, Unit 2, Plant 3), the asset and employee will be assigned directly to that Plant. If left blank, it automatically defaults to the Plant selected in the top dropdown of the modal.'],
     ];
     const wsGuide = XLSX.utils.aoa_to_sheet(guidelines);
     wsGuide['!cols'] = [{ wch: 35 }, { wch: 75 }];
@@ -622,6 +630,8 @@ export default function SmartAssetImportModal({
         const lifecycle_status = getVal([/^status/i, /^lifecycle/i, /^operational.*status/i]);
         const assigned_date = getVal([/^assigned.*date/i, /^deployed.*date/i, /^in.*service.*date/i, /^deployed.*since/i]);
         const exact_location = getVal([/^exact.*location/i, /^location.*detail/i, /^desk/i, /^room/i, /^cubicle/i, /^floor/i]);
+        const plant_name = getVal([/^plant/i, /^unit/i, /^factory/i]);
+        const location_name = getVal([/^location$/i, /^site/i, /^city/i]);
         const amc_vendor = getVal([/^amc.*vendor/i, /^amc.*provider/i, /^amc.*company/i]);
         const amc_expiry = getVal([/^amc.*expiry/i, /^amc.*date/i, /^amc.*end/i]);
         const past_service_history = getVal([/^past.*service/i, /^service.*history/i, /^repair.*history/i, /^maintenance.*history/i, /^history.*notes/i]);
@@ -696,6 +706,10 @@ export default function SmartAssetImportModal({
           statusMessages.push('Unassigned: Will be added directly to In Stock pool');
         }
 
+        if (plant_name) {
+          statusMessages.push(`Plant Target: ${plant_name}`);
+        }
+
         analyzed.push({
           rowNum,
           name,
@@ -728,6 +742,8 @@ export default function SmartAssetImportModal({
           lifecycle_status: lifecycle_status || undefined,
           assigned_date: assigned_date || undefined,
           exact_location: exact_location || undefined,
+          plant_name: plant_name || undefined,
+          location_name: location_name || undefined,
           amc_vendor: amc_vendor || undefined,
           amc_expiry: amc_expiry || undefined,
           past_service_history: past_service_history || undefined,
@@ -813,6 +829,8 @@ export default function SmartAssetImportModal({
         lifecycle_status: r.lifecycle_status,
         assigned_date: r.assigned_date,
         exact_location: r.exact_location,
+        plant_name: r.plant_name,
+        location_name: r.location_name,
         amc_vendor: r.amc_vendor,
         amc_expiry: r.amc_expiry,
         past_service_history: r.past_service_history,
@@ -1305,6 +1323,11 @@ export default function SmartAssetImportModal({
                                   <p className="text-[8.5px] font-mono font-semibold text-blue-600 bg-blue-50 px-1 py-0.5 rounded mt-0.5 inline-block">
                                     {[row.processor, row.ram, row.storage].filter(Boolean).join(' • ')}
                                   </p>
+                                )}
+                                {row.plant_name && (
+                                  <span className="text-[8.5px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 mt-0.5 inline-block ml-1">
+                                    Plant: {row.plant_name}
+                                  </span>
                                 )}
                               </td>
 

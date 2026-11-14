@@ -4270,6 +4270,8 @@ export interface BatchImportAssetItem {
   lifecycle_status?: string;
   assigned_date?: string;
   exact_location?: string;
+  plant_name?: string;
+  location_name?: string;
   past_service_history?: string;
   remarks?: string;
   emp_code?: string;
@@ -4344,6 +4346,19 @@ export async function batchImportAssets(
   // 2. Preload existing employees into a local lookup Map to deduplicate
   const empLookup = new Map<string, { id: string; status: string; full_name: string }>();
 
+  // 3. Preload all plants and locations for row-level resolution
+  let allPlants: Plant[] = [];
+  let allLocations: Location[] = [];
+  if (env.isMockMode) {
+    allPlants = [...memory.plants];
+    allLocations = [...memory.locations];
+  } else {
+    const { data: pData } = await db.from('plants').select('*');
+    if (pData) allPlants = pData as Plant[];
+    const { data: lData } = await db.from('locations').select('*');
+    if (lData) allLocations = lData as Location[];
+  }
+
   if (env.isMockMode) {
     memory.employees.forEach((e) => {
       if (e.emp_code) {
@@ -4382,6 +4397,29 @@ export async function batchImportAssets(
 
     const { id: catId, typeStr: catTypeStr } = await resolveCategoryId(item.category_name);
 
+    // Resolve Plant & Location (Row-level from Excel or fallback to batch selection)
+    let rowPlantId = plant_id;
+    let rowLocationId = location_id;
+    if (item.plant_name?.trim()) {
+      const cleanPlantStr = item.plant_name.trim().toUpperCase();
+      const matchedPlant = allPlants.find(
+        (p) => p.name.toUpperCase() === cleanPlantStr || p.code.toUpperCase() === cleanPlantStr || p.name.toUpperCase().includes(cleanPlantStr)
+      );
+      if (matchedPlant) {
+        rowPlantId = matchedPlant.id;
+        rowLocationId = matchedPlant.location_id || location_id;
+      }
+    }
+    if (item.location_name?.trim()) {
+      const cleanLocStr = item.location_name.trim().toUpperCase();
+      const matchedLoc = allLocations.find(
+        (l) => l.name.toUpperCase() === cleanLocStr || l.code.toUpperCase() === cleanLocStr || l.name.toUpperCase().includes(cleanLocStr)
+      );
+      if (matchedLoc) {
+        rowLocationId = matchedLoc.id;
+      }
+    }
+
     // Custodian Resolution & Auto-Creation Logic
     let assignedEmployeeId: string | null = null;
     const cleanEmpCode = item.emp_code?.trim().toUpperCase();
@@ -4407,8 +4445,8 @@ export async function batchImportAssets(
           phone: item.emp_phone?.trim() || null,
           designation: item.emp_designation?.trim().toUpperCase() || 'STAFF',
           department_id,
-          plant_id,
-          location_id,
+          plant_id: rowPlantId,
+          location_id: rowLocationId,
           status: 'active',
           created_at: now,
           updated_at: now,
@@ -4426,8 +4464,8 @@ export async function batchImportAssets(
               phone: item.emp_phone?.trim() || null,
               designation: item.emp_designation?.trim().toUpperCase() || 'STAFF',
               department_id,
-              plant_id,
-              location_id,
+              plant_id: rowPlantId,
+              location_id: rowLocationId,
               status: 'active',
             });
           } catch (empErr) {
@@ -4527,8 +4565,8 @@ export async function batchImportAssets(
       warranty_expiry: item.warranty_expiry || null,
       amc_vendor: item.amc_vendor?.trim().toUpperCase() || null,
       amc_expiry: item.amc_expiry || null,
-      current_location_id: location_id,
-      current_plant_id: plant_id,
+      current_location_id: rowLocationId,
+      current_plant_id: rowPlantId,
       current_department_id: department_id,
       assigned_employee_id: assetStatus === 'in_service' ? assignedEmployeeId : null,
       status: assetStatus,
