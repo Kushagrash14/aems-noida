@@ -29,7 +29,18 @@ export function canUserEdit(user: User, scope?: UserScope | null): boolean {
 export function canUserManageEmployees(user: User, scope?: UserScope | null): boolean {
   if (user.role === 'it_admin' || user.role === 'admin' || user.role === 'hr') return true;
   if (!user.is_active) return false;
-  return Boolean(scope?.can_manage_employees);
+  return Boolean(scope?.can_manage_employees || user.scope?.can_manage_employees);
+}
+
+/**
+ * Check if the user is authorized to bulk import assets
+ * - IT Admin and Admin roles always have bulk import access
+ * - Standard User can import assets if scope.can_import_assets is enabled
+ */
+export function canUserImportAssets(user: User, scope?: UserScope | null): boolean {
+  if (user.role === 'it_admin' || user.role === 'admin') return true;
+  if (!user.is_active) return false;
+  return Boolean(scope?.can_import_assets || user.scope?.can_import_assets);
 }
 
 /**
@@ -116,10 +127,11 @@ export function canCreateUsers(user: User): boolean {
 
 /**
  * Check if a user is allowed to run Bulk Excel Import
- * Rule: Strictly IT Admin. Admins and Users cannot see or run Bulk Import.
+ * - IT Admin and Admin roles always have bulk import access
+ * - Users with can_import_assets permission enabled can run Bulk Import within their scope
  */
-export function canPerformBulkImport(user: User): boolean {
-  return user.role === 'it_admin';
+export function canPerformBulkImport(user: User, scope?: UserScope | null): boolean {
+  return canUserImportAssets(user, scope);
 }
 
 /**

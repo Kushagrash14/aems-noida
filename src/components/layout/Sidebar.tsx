@@ -380,6 +380,22 @@ function SidebarContent({ user }: SidebarProps) {
             <span>Staff Directory</span>
           </Link>
 
+          {/* Bulk Excel Import (IT Admin, Admin, or User with can_import_assets) */}
+          {(user?.role === 'it_admin' || user?.role === 'admin' || Boolean(user?.scope?.can_import_assets)) && (
+            <Link
+              href="/bulk-import"
+              onClick={handleNavClick}
+              className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                pathname.startsWith('/bulk-import')
+                  ? 'bg-blue-600 text-white shadow-xs font-bold'
+                  : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
+              }`}
+            >
+              <FileSpreadsheet className={`h-4 w-4 shrink-0 ${pathname.startsWith('/bulk-import') ? 'text-white' : 'text-slate-500'}`} />
+              <span>Bulk Excel Import</span>
+            </Link>
+          )}
+
           {/* HR Dashboard (IT Admin & HR Only) */}
           {(user?.role === 'it_admin' || user?.role === 'hr') && (
             <Link

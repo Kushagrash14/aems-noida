@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Asset, Category, CategoryFormField, FieldType, Location, Plant, Department, Employee, User } from '@/types/database';
-import { canUserManageEmployees } from '@/lib/permissions';
+import { canUserManageEmployees, canUserImportAssets } from '@/lib/permissions';
 import SearchableCombobox from '@/components/ui/SearchableCombobox';
 import { getAssetPreviewImage } from '@/lib/assetVisuals';
 import { uploadDataUrl } from '@/lib/uploadClient';
@@ -428,9 +428,10 @@ function AssetWizardContent() {
   // Dynamic Department Theme (for IT Admin Smart Excel Importer Button)
   const deptTheme = useMemo(() => getDepartmentTheme(selectedDeptName), [selectedDeptName]);
 
-  // Authorization for Smart Excel Batch Import (STRICTLY IT Admin only)
+  // Authorization for Smart Excel Batch Import (IT Admin, Admin, or authorized users)
   const isAuthorizedForImport = useMemo(() => {
-    return currentUser?.role === 'it_admin';
+    if (!currentUser) return false;
+    return canUserImportAssets(currentUser, currentUser.scope);
   }, [currentUser]);
 
   // Authorization to create / register new employee profile

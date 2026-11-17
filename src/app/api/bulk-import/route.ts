@@ -12,8 +12,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (!canPerformBulkImport(validation.user)) {
-    return NextResponse.json({ error: 'Permission denied: Bulk Import is strictly restricted to IT Admins' }, { status: 403 });
+  if (!canPerformBulkImport(validation.user, validation.scope)) {
+    return NextResponse.json({ error: 'Permission denied: Bulk Import requires Bulk Importer authorization' }, { status: 403 });
   }
 
   try {

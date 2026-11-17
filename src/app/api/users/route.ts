@@ -67,6 +67,7 @@ export async function POST(req: NextRequest) {
       sub_department,
       can_edit = true,
       can_manage_employees = false,
+      can_import_assets = false,
       category_ids = null,
       location_ids = null,
       plant_ids = null,
@@ -168,6 +169,7 @@ export async function POST(req: NextRequest) {
       {
         can_edit: isItAdmin ? true : Boolean(can_edit),
         can_manage_employees: isItAdmin ? true : Boolean(can_manage_employees),
+        can_import_assets: isItAdmin ? true : Boolean(can_import_assets),
         category_ids: isItAdmin ? null : (Array.isArray(category_ids) && category_ids.length > 0 ? category_ids : null),
         location_ids: isItAdmin ? null : (Array.isArray(location_ids) && location_ids.length > 0 ? location_ids : (resolvedLocId ? [resolvedLocId] : null)),
         plant_ids: incomingPlantIds,
@@ -228,6 +230,7 @@ export async function PATCH(req: NextRequest) {
       targetRole,
       can_edit,
       can_manage_employees,
+      can_import_assets,
       category_ids,
       location_ids,
       plant_ids,
@@ -362,6 +365,7 @@ export async function PATCH(req: NextRequest) {
     await updateUserScope(userId, {
       can_edit: isItAdmin ? true : Boolean(can_edit ?? true),
       can_manage_employees: isItAdmin ? true : (can_manage_employees !== undefined ? Boolean(can_manage_employees) : undefined),
+      can_import_assets: isItAdmin ? true : (can_import_assets !== undefined ? Boolean(can_import_assets) : undefined),
       category_ids: isItAdmin ? null : (category_ids && category_ids.length > 0 ? category_ids : null),
       location_ids: resolvedLocationIds,
       plant_ids: resolvedPlantIds,

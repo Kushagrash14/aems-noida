@@ -179,7 +179,12 @@ export default function BulkImportPage() {
     }
   };
 
-  if (!loadingAuth && currentUser && currentUser.role !== 'it_admin') {
+  const canAccessImport =
+    currentUser?.role === 'it_admin' ||
+    currentUser?.role === 'admin' ||
+    Boolean(currentUser?.scope?.can_import_assets);
+
+  if (!loadingAuth && currentUser && !canAccessImport) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[500px] text-center p-6">
         <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 mb-4">
@@ -187,7 +192,7 @@ export default function BulkImportPage() {
         </div>
         <h2 className="text-xl font-bold text-white mb-2">Access Restricted</h2>
         <p className="text-sm text-slate-400 max-w-md mb-6">
-          Bulk Excel Import is strictly restricted to IT Administrators. Facility Admins and Users cannot perform bulk imports.
+          Bulk Excel Import requires Bulk Importer authorization granted by a Super Administrator.
         </p>
         <Link
           href="/"

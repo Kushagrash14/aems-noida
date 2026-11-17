@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Asset, Category, Department, Location, Plant, User } from '@/types/database';
 import { formatCurrency } from '@/lib/utils';
 import { getAssetPreviewImage } from '@/lib/assetVisuals';
+import SmartAssetImportModal from '@/components/assets/SmartAssetImportModal';
+import { canUserImportAssets } from '@/lib/permissions';
 import {
   Search,
   Filter,
@@ -35,6 +37,7 @@ import {
   ChevronDown,
   X,
   Plus,
+  Sparkles,
 } from 'lucide-react';
 
 function AssetsDirectoryContent() {
@@ -50,6 +53,13 @@ function AssetsDirectoryContent() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importSuccessToast, setImportSuccessToast] = useState<string | null>(null);
+
+  const canImportAssets = useMemo(() => {
+    if (!currentUser) return false;
+    return canUserImportAssets(currentUser, currentUser.scope);
+  }, [currentUser]);
 
   // Master Filter Open/Close State (Auto-close on scroll or mouse leave)
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -754,6 +764,19 @@ const DEFAULT_DEPT_CATEGORIES: Record<string, string[]> = {
               <span className="hidden sm:inline">CSV</span>
             </button>
 
+            {/* Smart Excel Batch Import Button (Visible to authorized importers) */}
+            {canImportAssets && (
+              <button
+                type="button"
+                onClick={() => setShowImportModal(true)}
+                title="Smart Excel Batch Importer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer whitespace-nowrap"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>⚡ Smart Import</span>
+              </button>
+            )}
+
             {/* Primary "+ New Asset" Button */}
             <button
               type="button"
@@ -1351,6 +1374,43 @@ const DEFAULT_DEPT_CATEGORIES: Record<string, string[]> = {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Toast Notification */}
+      {importSuccessToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-xl text-xs font-bold animate-in fade-in slide-in-from-bottom-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{importSuccessToast}</span>
+        </div>
+      )}
+
+      {/* Smart Asset Batch Import Modal */}
+      {showImportModal && canImportAssets && (
+        <SmartAssetImportModal
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          departmentName={
+            departments.find((d) => d.id === selectedDepartment)?.name ||
+            departments.find((d) => d.id === currentUser?.department_id)?.name ||
+            'Information Technology'
+          }
+          departmentId={
+            selectedDepartment ||
+            currentUser?.department_id ||
+            departments[0]?.id ||
+            ''
+          }
+          locations={locations}
+          plants={plants}
+          departments={departments}
+          onImportSuccess={(res) => {
+            fetchData();
+            setImportSuccessToast(
+              `Batch Import Committed! ${res.assets_created} assets imported (${res.assets_assigned} assigned, ${res.assets_in_stock} in stock). ${res.employees_created} new staff profiles provisioned.`
+            );
+            setTimeout(() => setImportSuccessToast(null), 6000);
+          }}
+        />
       )}
     </div>
   );

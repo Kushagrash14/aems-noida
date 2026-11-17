@@ -434,8 +434,8 @@ function NavbarContent({ user, scope }: NavbarProps) {
           <RotateCw className="w-3.5 h-3.5" />
         </button>
 
-        {/* Download / Export Button (IT Admin) */}
-        {user?.role === 'it_admin' && (
+        {/* Download / Export / Bulk Import Button */}
+        {(user?.role === 'it_admin' || user?.role === 'admin' || Boolean(user?.scope?.can_import_assets)) && (
           <Link
             href="/bulk-import"
             title="Bulk Excel Import / Export"

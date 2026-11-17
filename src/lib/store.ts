@@ -4058,6 +4058,7 @@ export async function getUsersWithScopes(): Promise<Array<User & { scope?: UserS
         ? {
             ...scope,
             can_manage_employees: Boolean(scope.can_manage_employees),
+            can_import_assets: Boolean(scope.can_import_assets),
             location_ids: parsedLocIds,
             plant_ids: parsedPltIds,
             department_ids: hasExplicitDepts
@@ -4077,6 +4078,7 @@ export async function updateUserScope(
   scopeData: {
     can_edit: boolean;
     can_manage_employees?: boolean;
+    can_import_assets?: boolean;
     category_ids: string[] | null;
     location_ids: string[] | null;
     plant_ids: string[] | null;
@@ -4113,10 +4115,23 @@ export async function updateUserScope(
   if (scopeData.can_manage_employees !== undefined) {
     dbScopePayload.can_manage_employees = Boolean(scopeData.can_manage_employees);
   }
+  if (scopeData.can_import_assets !== undefined) {
+    dbScopePayload.can_import_assets = Boolean(scopeData.can_import_assets);
+  }
 
-  const { error: scopeError } = await db
+  let { error: scopeError } = await db
     .from('user_scopes')
     .upsert(dbScopePayload, { onConflict: 'user_id' });
+
+  // Graceful fallback if database column does not exist yet
+  if (scopeError && (scopeError.message?.includes('can_import_assets') || scopeError.message?.includes('Unknown column'))) {
+    delete dbScopePayload.can_import_assets;
+    const retry = await db
+      .from('user_scopes')
+      .upsert(dbScopePayload, { onConflict: 'user_id' });
+    scopeError = retry.error;
+  }
+
   if (scopeError) throw new Error(scopeError.message);
 
   // Sync department master admin_user_id
@@ -4143,6 +4158,7 @@ export async function createUser(
   scopeData: {
     can_edit: boolean;
     can_manage_employees?: boolean;
+    can_import_assets?: boolean;
     location_ids?: string[] | null;
     plant_ids?: string[] | null;
     category_ids?: string[] | null;
@@ -4174,6 +4190,7 @@ export async function createUser(
     user_id: userId,
     can_edit: scopeData.can_edit,
     can_manage_employees: Boolean(scopeData.can_manage_employees),
+    can_import_assets: Boolean(scopeData.can_import_assets),
     category_ids: scopeData.category_ids || null,
     location_ids: scopeData.location_ids || null,
     plant_ids: scopeData.plant_ids || null,
@@ -4219,6 +4236,7 @@ export async function createUser(
     user_id: userId,
     can_edit: newScope.can_edit,
     can_manage_employees: Boolean(scopeData.can_manage_employees),
+    can_import_assets: Boolean(scopeData.can_import_assets),
     category_ids: newScope.category_ids || null,
     location_ids: newScope.location_ids,
     plant_ids: newScope.plant_ids,
@@ -4228,7 +4246,12 @@ export async function createUser(
     updated_at: now,
   };
 
-  const { error: scopeError } = await db.from('user_scopes').insert(dbScopePayload);
+  let { error: scopeError } = await db.from('user_scopes').insert(dbScopePayload);
+  if (scopeError && (scopeError.message?.includes('can_import_assets') || scopeError.message?.includes('Unknown column'))) {
+    delete dbScopePayload.can_import_assets;
+    const retry = await db.from('user_scopes').insert(dbScopePayload);
+    scopeError = retry.error;
+  }
   if (scopeError) {
     await db.from('users').delete().eq('id', userId);
     throw new Error(scopeError.message);

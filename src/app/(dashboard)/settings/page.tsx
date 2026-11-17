@@ -163,6 +163,7 @@ function SettingsContent() {
   const [userSubDept, setUserSubDept] = useState('');
   const [userCanEdit, setUserCanEdit] = useState(true);
   const [userCanManageEmployees, setUserCanManageEmployees] = useState(false);
+  const [userCanImportAssets, setUserCanImportAssets] = useState(false);
   const [userModalError, setUserModalError] = useState<string | null>(null);
 
   // Permitted plant IDs for current user:
@@ -225,6 +226,7 @@ function SettingsContent() {
     setUserSubDept(isFacilityAdmin ? (currentUser?.sub_department || '') : '');
     setUserCanEdit(true);
     setUserCanManageEmployees(false);
+    setUserCanImportAssets(false);
     setUserModalError(null);
     setShowAddUserModal(true);
   };
@@ -268,6 +270,7 @@ function SettingsContent() {
     setUserSubDept(u.sub_department || u.scope?.sub_department || '');
     setUserCanEdit(u.scope?.can_edit ?? true);
     setUserCanManageEmployees(Boolean(u.scope?.can_manage_employees));
+    setUserCanImportAssets(Boolean(u.scope?.can_import_assets));
     setUserModalError(null);
   };
 
@@ -347,6 +350,7 @@ function SettingsContent() {
           sub_department: isItAdmin ? null : (userSubDept.trim() || 'None'),
           can_edit: isItAdmin ? true : userCanEdit,
           can_manage_employees: isItAdmin || resolvedRole === 'admin' || resolvedRole === 'hr' ? true : userCanManageEmployees,
+          can_import_assets: isItAdmin || resolvedRole === 'admin' ? true : userCanImportAssets,
           location_ids: isItAdmin ? null : (derivedLocIds && derivedLocIds.length > 0 ? derivedLocIds : (effectiveLoc ? [effectiveLoc] : null)),
           plant_ids: effectivePlantIds,
           department_ids: effectiveDeptIds,
@@ -451,6 +455,7 @@ function SettingsContent() {
           sub_department: isItAdmin ? null : (userSubDept.trim() || 'None'),
           can_edit: isItAdmin ? true : userCanEdit,
           can_manage_employees: isItAdmin || resolvedRole === 'admin' || resolvedRole === 'hr' ? true : userCanManageEmployees,
+          can_import_assets: isItAdmin || resolvedRole === 'admin' ? true : userCanImportAssets,
           location_ids: isItAdmin ? null : (derivedLocIds && derivedLocIds.length > 0 ? derivedLocIds : (effectiveLoc ? [effectiveLoc] : null)),
           plant_ids: effectivePlantIds,
           department_ids: effectiveDeptIds,
@@ -1602,6 +1607,11 @@ function SettingsContent() {
                                 {Boolean(u.scope?.can_manage_employees) && (
                                   <span className="rounded bg-indigo-50 px-2 py-0.5 text-[9px] font-bold text-indigo-700 border border-indigo-200 whitespace-nowrap">
                                     + Emp Add Allowed
+                                  </span>
+                                )}
+                                {Boolean(u.scope?.can_import_assets) && (
+                                  <span className="rounded bg-teal-50 px-2 py-0.5 text-[9px] font-bold text-teal-700 border border-teal-200 whitespace-nowrap">
+                                    + Importer Allowed
                                   </span>
                                 )}
                               </div>
@@ -2956,6 +2966,19 @@ function SettingsContent() {
                       <span className="text-[10px] text-slate-500 font-normal">Permits this user to create and register employees within their assigned Plant and Department</span>
                     </div>
                   </label>
+                  <label className="flex items-start gap-2 text-xs font-bold text-slate-700 cursor-pointer pt-2 border-t border-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={userRole === 'admin' ? true : userCanImportAssets}
+                      disabled={userRole === 'admin'}
+                      onChange={(e) => setUserCanImportAssets(e.target.checked)}
+                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-0 cursor-pointer disabled:opacity-50"
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-slate-800">Allow Bulk Asset Importer Access</span>
+                      <span className="text-[10px] text-slate-500 font-normal">Permits this user to use the Excel Bulk Asset Importer within their assigned Plant and Department scope</span>
+                    </div>
+                  </label>
                 </div>
               )}
 
@@ -3492,6 +3515,19 @@ function SettingsContent() {
                     <div className="flex flex-col">
                       <span className="text-slate-800">Allow Access to Add & Manage Employees</span>
                       <span className="text-[10px] text-slate-500 font-normal">Permits this user to create and register employees within their assigned Plant and Department</span>
+                    </div>
+                  </label>
+                  <label className="flex items-start gap-2 text-xs font-bold text-slate-700 cursor-pointer pt-2 border-t border-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={userRole === 'admin' ? true : userCanImportAssets}
+                      disabled={userRole === 'admin'}
+                      onChange={(e) => setUserCanImportAssets(e.target.checked)}
+                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-0 cursor-pointer disabled:opacity-50"
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-slate-800">Allow Bulk Asset Importer Access</span>
+                      <span className="text-[10px] text-slate-500 font-normal">Permits this user to use the Excel Bulk Asset Importer within their assigned Plant and Department scope</span>
                     </div>
                   </label>
                 </div>

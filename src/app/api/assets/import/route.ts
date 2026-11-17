@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth/session';
 import { batchImportAssets, BatchImportPayload } from '@/lib/store';
+import { canPerformBulkImport, isEntityInUserScope } from '@/lib/permissions';
 import { logAuditEvent } from '@/lib/audit';
 
 export async function POST(req: NextRequest) {
@@ -11,10 +12,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized: active login session required' }, { status: 401 });
   }
 
-  // Strict Role-Based Access Control: IT Admin & Admin
-  if (validation.user.role !== 'it_admin' && validation.user.role !== 'admin') {
+  // Check Bulk Import Authorization (IT Admin, Admin, or User with can_import_assets)
+  const canImport = canPerformBulkImport(validation.user, validation.scope);
+  if (!canImport) {
     return NextResponse.json(
-      { error: 'Forbidden: Only IT Administrators and Admins have authorization to batch import assets.' },
+      { error: 'Forbidden: You do not have authorization to batch import assets. Please contact your Super Administrator.' },
       { status: 403 }
     );
   }
@@ -27,6 +29,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: 'Location, Plant, and Department selections are required.' },
         { status: 400 }
+      );
+    }
+
+    // Industrial Scope Verification: Ensure target plant, location, department are within user scope
+    if (!isEntityInUserScope(validation.user, validation.scope, { location_id, plant_id, department_id })) {
+      return NextResponse.json(
+        { error: 'Access Denied: The target Plant or Department is outside your authorized scope.' },
+        { status: 403 }
       );
     }
 
