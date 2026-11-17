@@ -67,6 +67,7 @@ interface ParsedImportRow {
   emp_email?: string;
   emp_phone?: string;
   emp_designation?: string;
+  emp_department?: string;
   remarks?: string;
 
   // Technical & Network Specifications (for IT Laptops/Desktops/Devices)
@@ -344,6 +345,7 @@ export default function SmartAssetImportModal({
           'Employee Email (Optional)': 'amit.sharma@pgel.in',
           'Employee Phone (Optional)': '9876543210',
           'Employee Designation (Optional)': 'Sr. Software Engineer',
+          'Employee Department (Optional)': 'Information Technology',
           'Remarks (Optional)': 'Assigned for Core ERP Migration',
         },
         {
@@ -382,6 +384,7 @@ export default function SmartAssetImportModal({
           'Employee Email (Optional)': 'priya.patel@pgel.in',
           'Employee Phone (Optional)': '9876543211',
           'Employee Designation (Optional)': 'UI/UX Lead',
+          'Employee Department (Optional)': 'Finance & Accounts',
           'Remarks (Optional)': 'Out of OEM warranty, covered under annual AMC contract',
         },
         {
@@ -420,6 +423,7 @@ export default function SmartAssetImportModal({
           'Employee Email (Optional)': '',
           'Employee Phone (Optional)': '',
           'Employee Designation (Optional)': '',
+          'Employee Department (Optional)': '',
           'Remarks (Optional)': 'Buffer inventory for new joinees or emergency replacement',
         },
       ];
@@ -442,6 +446,7 @@ export default function SmartAssetImportModal({
           'Employee Email (Optional)': 'rajesh.kumar@pgel.in',
           'Employee Phone (Optional)': '9811223344',
           'Employee Designation (Optional)': 'Molding Line Supervisor',
+          'Employee Department (Optional)': 'Production & Assembly',
           'Remarks (Optional)': 'Bay 4 Molding Area Unit 1',
         },
         {
@@ -461,6 +466,7 @@ export default function SmartAssetImportModal({
           'Employee Email (Optional)': '',
           'Employee Phone (Optional)': '',
           'Employee Designation (Optional)': '',
+          'Employee Department (Optional)': '',
           'Remarks (Optional)': 'Final Assembly Feed Line - Plant Floor Asset',
         },
       ];
@@ -483,6 +489,7 @@ export default function SmartAssetImportModal({
           'Employee Email (Optional)': 'sanjay@pgel.in',
           'Employee Phone (Optional)': '9800000001',
           'Employee Designation (Optional)': 'Department Operator',
+          'Employee Department (Optional)': cleanDept,
           'Remarks (Optional)': 'Main floor equipment',
         },
       ];
@@ -679,6 +686,16 @@ export default function SmartAssetImportModal({
         const emp_email = getVal([/^emp.*email/i, /^employee.*email/i, /^email$/i]);
         const emp_phone = getVal([/^emp.*phone/i, /^phone/i, /^mobile/i]);
         const emp_designation = getVal([/^emp.*desig/i, /^designation/i, /^role$/i]);
+        const emp_department = getVal([
+          /^emp.*dept/i,
+          /^employee.*dept/i,
+          /^emp.*department/i,
+          /^staff.*dept/i,
+          /^custodian.*dept/i,
+          /^employee.*department/i,
+          /^emp.*division/i,
+          /^staff.*department/i,
+        ]);
         const remarks = getVal([/^remarks/i, /^notes/i, /^comments/i]);
 
         const statusMessages: string[] = [];
@@ -730,13 +747,13 @@ export default function SmartAssetImportModal({
               isStock = true;
             } else {
               isAssigned = true;
-              statusMessages.push(`Assigned to: ${emp.full_name} (${cleanEmpCode})`);
+              statusMessages.push(`Assigned to: ${emp.full_name} (${cleanEmpCode})${emp_department ? ` [${emp_department}]` : ''}`);
             }
           } else {
             // Brand new employee auto-provisioning!
             willCreateEmployee = true;
             isAssigned = true;
-            statusMessages.push(`Auto-Provision: New profile will be created for "${emp_name || cleanEmpCode}"`);
+            statusMessages.push(`Auto-Provision: New profile will be created for "${emp_name || cleanEmpCode}"${emp_department ? ` in [${emp_department}]` : ''}`);
           }
         } else {
           // No employee code -> direct stock pool
@@ -769,6 +786,7 @@ export default function SmartAssetImportModal({
           emp_email,
           emp_phone,
           emp_designation,
+          emp_department: emp_department || undefined,
           remarks,
           processor,
           ram,
@@ -860,6 +878,7 @@ export default function SmartAssetImportModal({
         emp_email: r.emp_email,
         emp_phone: r.emp_phone,
         emp_designation: r.emp_designation,
+        emp_department: r.emp_department,
         processor: r.processor,
         ram: r.ram,
         storage: r.storage,
@@ -1386,15 +1405,29 @@ export default function SmartAssetImportModal({
 
                               <td className="py-1.5 px-2.5">
                                 {row.willCreateEmployee ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded-md border border-blue-200">
-                                    <Users className="w-2.5 h-2.5 text-blue-600" />
-                                    Auto-Create: {row.emp_name || row.emp_code}
-                                  </span>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded-md border border-blue-200">
+                                      <Users className="w-2.5 h-2.5 text-blue-600" />
+                                      Auto-Create: {row.emp_name || row.emp_code}
+                                    </span>
+                                    {row.emp_department && (
+                                      <span className="text-[9px] font-semibold text-blue-600 pl-1">
+                                        Dept: {row.emp_department}
+                                      </span>
+                                    )}
+                                  </div>
                                 ) : row.emp_code && row.isAssigned ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-200">
-                                    <Check className="w-2.5 h-2.5 text-emerald-600" />
-                                    {row.emp_code}
-                                  </span>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-200">
+                                      <Check className="w-2.5 h-2.5 text-emerald-600" />
+                                      {row.emp_code}
+                                    </span>
+                                    {row.emp_department && (
+                                      <span className="text-[9px] font-semibold text-slate-500 pl-1">
+                                        Dept: {row.emp_department}
+                                      </span>
+                                    )}
+                                  </div>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-md">
                                     <Box className="w-2.5 h-2.5 text-slate-500" />

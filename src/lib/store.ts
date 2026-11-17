@@ -4366,6 +4366,7 @@ export interface BatchImportAssetItem {
   emp_email?: string;
   emp_phone?: string;
   emp_designation?: string;
+  emp_department?: string;
 }
 
 export interface BatchImportPayload {
@@ -4433,18 +4434,116 @@ export async function batchImportAssets(
   // 2. Preload existing employees into a local lookup Map to deduplicate
   const empLookup = new Map<string, { id: string; status: string; full_name: string }>();
 
-  // 3. Preload all plants and locations for row-level resolution
+  // 3. Preload all plants, locations, and departments for row-level resolution
   let allPlants: Plant[] = [];
   let allLocations: Location[] = [];
+  let allDepartments: Department[] = [];
   if (env.isMockMode) {
     allPlants = [...memory.plants];
     allLocations = [...memory.locations];
+    allDepartments = [...memory.departments];
   } else {
     const { data: pData } = await db.from('plants').select('*');
     if (pData) allPlants = pData as Plant[];
     const { data: lData } = await db.from('locations').select('*');
     if (lData) allLocations = lData as Location[];
+    const { data: dData } = await db.from('departments').select('*');
+    if (dData) allDepartments = dData as Department[];
   }
+
+  // Helper to resolve employee's specific department from Excel (e.g. Finance, Production, IT)
+  const resolveEmployeeDepartmentId = async (
+    deptNameStr?: string | null,
+    plantIdForDept?: string | null
+  ): Promise<string> => {
+    if (!deptNameStr || !deptNameStr.trim()) {
+      return department_id; // Default fallback to batch asset department
+    }
+    const clean = deptNameStr.trim().toUpperCase();
+
+    // 1. Direct match by name or code
+    const matched = allDepartments.find(
+      (d) =>
+        d.name.trim().toUpperCase() === clean ||
+        d.code.trim().toUpperCase() === clean ||
+        d.name.trim().toUpperCase() === `DEPT-${clean}` ||
+        d.name.trim().toUpperCase().includes(clean) ||
+        clean.includes(d.name.trim().toUpperCase())
+    );
+    if (matched) return matched.id;
+
+    // 2. Canonical enterprise department synonyms
+    const DEPT_SYNONYMS: Record<string, string> = {
+      'IT': 'INFORMATION TECHNOLOGY',
+      'INFO TECH': 'INFORMATION TECHNOLOGY',
+      'FINANCE': 'FINANCE & ACCOUNTS',
+      'FIN': 'FINANCE & ACCOUNTS',
+      'ACCOUNTS': 'FINANCE & ACCOUNTS',
+      'ACCOUNT': 'FINANCE & ACCOUNTS',
+      'HR': 'HUMAN RESOURCES',
+      'HRD': 'HUMAN RESOURCES',
+      'ADMIN': 'ADMINISTRATION',
+      'QA': 'QUALITY ASSURANCE',
+      'QC': 'QUALITY CONTROL',
+      'QUALITY': 'QUALITY ASSURANCE',
+      'PROD': 'PRODUCTION & ASSEMBLY',
+      'PRODUCTION': 'PRODUCTION & ASSEMBLY',
+      'ASSEMBLY': 'PRODUCTION & ASSEMBLY',
+      'STORE': 'STORES & LOGISTICS',
+      'STORES': 'STORES & LOGISTICS',
+      'LOGISTICS': 'STORES & LOGISTICS',
+      'MAINTENANCE': 'PLANT MAINTENANCE & ELECTRICAL',
+      'MAINT': 'PLANT MAINTENANCE & ELECTRICAL',
+      'ELECTRICAL': 'PLANT MAINTENANCE & ELECTRICAL',
+      'PURCHASE': 'PURCHASE & SOURCING',
+      'PROCUREMENT': 'PURCHASE & SOURCING',
+      'DISPATCH': 'DISPATCH & LOGISTICS',
+      'SAFETY': 'HEALTH, SAFETY & ENVIRONMENT',
+      'HSE': 'HEALTH, SAFETY & ENVIRONMENT',
+      'EHS': 'HEALTH, SAFETY & ENVIRONMENT',
+      'R&D': 'RESEARCH & DEVELOPMENT',
+      'ENGINEERING': 'ENGINEERING & DESIGN',
+    };
+
+    const synTarget = DEPT_SYNONYMS[clean];
+    if (synTarget) {
+      const synMatched = allDepartments.find(
+        (d) =>
+          d.name.trim().toUpperCase() === synTarget ||
+          d.name.trim().toUpperCase().includes(synTarget)
+      );
+      if (synMatched) return synMatched.id;
+    }
+
+    // 3. Auto-provision department if new
+    const cleanCode = `DEPT-${clean.replace(/[^A-Z0-9]/g, '').slice(0, 8) || 'GEN'}`;
+    const newDeptId = crypto.randomUUID();
+    const newDeptObj: Department = {
+      id: newDeptId,
+      name: deptNameStr.trim(),
+      code: cleanCode,
+      plant_id: plantIdForDept || null,
+      created_at: now,
+      updated_at: now,
+    };
+
+    if (env.isMockMode) {
+      memory.departments.push(newDeptObj);
+    } else {
+      try {
+        await db.from('departments').insert({
+          id: newDeptId,
+          name: deptNameStr.trim(),
+          code: cleanCode,
+          plant_id: plantIdForDept || null,
+        });
+      } catch (deptErr) {
+        console.warn(`Failed to auto-create department ${clean}:`, deptErr);
+      }
+    }
+    allDepartments.push(newDeptObj);
+    return newDeptId;
+  };
 
   if (env.isMockMode) {
     memory.employees.forEach((e) => {
@@ -4544,14 +4643,31 @@ export async function batchImportAssets(
         const emp = empLookup.get(cleanEmpCode)!;
         if (emp.status !== 'inactive' && (emp.status as string) !== 'resigned') {
           assignedEmployeeId = emp.id;
+
+          // If department or designation was provided for existing employee, update employee profile!
+          if (item.emp_department?.trim() && !env.isMockMode) {
+            const empDeptId = await resolveEmployeeDepartmentId(item.emp_department, rowPlantId);
+            try {
+              await db.from('employees').update({ 
+                department_id: empDeptId,
+                ...(item.emp_designation ? { designation: item.emp_designation.trim().toUpperCase() } : {}),
+                ...(item.emp_email ? { email: item.emp_email.trim().toLowerCase() } : {}),
+                ...(item.emp_phone ? { phone: item.emp_phone.trim() } : {}),
+              }).eq('id', emp.id);
+            } catch (updErr) {
+              console.warn(`Employee profile update notice for ${cleanEmpCode}:`, updErr);
+            }
+          }
         } else {
           // Inactive employee guard: route safely to stock
           assignedEmployeeId = null;
         }
       } else {
-        // Auto-provision brand new Employee Profile in database!
+        // Auto-provision brand new Employee Profile in database with its TRUE DEPARTMENT!
         const newEmpId = crypto.randomUUID();
         const empFullName = (item.emp_name?.trim() || cleanEmpCode).toUpperCase();
+        const empDeptId = await resolveEmployeeDepartmentId(item.emp_department, rowPlantId);
+
         const newEmpData: Employee = {
           id: newEmpId,
           emp_code: cleanEmpCode,
@@ -4559,7 +4675,7 @@ export async function batchImportAssets(
           email: item.emp_email?.trim().toLowerCase() || null,
           phone: item.emp_phone?.trim() || null,
           designation: item.emp_designation?.trim().toUpperCase() || 'STAFF',
-          department_id,
+          department_id: empDeptId,
           plant_id: rowPlantId,
           location_id: rowLocationId,
           status: 'active',
@@ -4578,7 +4694,7 @@ export async function batchImportAssets(
               email: item.emp_email?.trim().toLowerCase() || null,
               phone: item.emp_phone?.trim() || null,
               designation: item.emp_designation?.trim().toUpperCase() || 'STAFF',
-              department_id,
+              department_id: empDeptId,
               plant_id: rowPlantId,
               location_id: rowLocationId,
               status: 'active',
