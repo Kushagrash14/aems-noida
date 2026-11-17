@@ -550,7 +550,26 @@ INSERT IGNORE INTO categories (id, name, code, description, icon) VALUES
   ('44444444-4444-4444-4444-444444444407', 'Vehicle', 'CAT-VEH', 'Forklifts, Stackers, Trucks, Company Vehicles', 'Truck'),
   ('44444444-4444-4444-4444-444444444408', 'Furniture', 'CAT-FURN', 'Workstations, Conference Tables, Ergonomic Chairs', 'Armchair'),
   ('44444444-4444-4444-4444-444444444409', 'Software License', 'CAT-SW', 'CAD/CAM Licenses, ERP Seats, OS Licences', 'Key'),
-  ('44444444-4444-4444-4444-444444444410', 'Maintenance', 'CAT-MAINT', 'Welding Machines, Hydraulic Presses, Toolkits', 'Wrench');
+  ('44444444-4444-4444-4444-444444444410', 'Maintenance', 'CAT-MAINT', 'Welding Machines, Hydraulic Presses, Toolkits', 'Wrench'),
+  ('44444444-4444-4444-4444-444444444411', 'Keyboard', 'CAT-KBD', 'Wired & Wireless Keyboards', 'Keyboard'),
+  ('44444444-4444-4444-4444-444444444412', 'Mouse', 'CAT-MOU', 'Optical & Wireless Mice', 'Mouse'),
+  ('44444444-4444-4444-4444-444444444413', 'UPS', 'CAT-UPS', 'Uninterruptible Power Supplies', 'Zap'),
+  ('44444444-4444-4444-4444-444444444414', 'Scanner', 'CAT-SCN', 'Barcode & Document Scanners', 'Scan'),
+  ('44444444-4444-4444-4444-444444444415', 'CPU', 'CAT-CPU', 'Desktop Central Processing Units', 'Cpu'),
+  ('44444444-4444-4444-4444-444444444416', 'Laptop Bag', 'CAT-BAG', 'Backpacks & Sleeves', 'Briefcase'),
+  ('44444444-4444-4444-4444-444444444417', 'External Monitor', 'CAT-MON', 'Secondary Displays & Screens', 'Monitor'),
+  ('44444444-4444-4444-4444-444444444418', 'Charger / Adapter', 'CAT-PWR', 'Power Adapters & Charging Cables', 'Power'),
+  ('44444444-4444-4444-4444-444444444419', 'RAM', 'CAT-RAM', 'RAM Memory Modules (DDR4 / DDR5)', 'Cpu'),
+  ('44444444-4444-4444-4444-444444444420', 'Hard Disk', 'CAT-HDD', 'Internal & External SSDs, NVMe, HDDs', 'HardDrive'),
+  ('44444444-4444-4444-4444-444444444421', 'Network Switch', 'CAT-SWT', 'Ethernet & Managed Switches with Ports', 'Network'),
+  ('44444444-4444-4444-4444-444444444422', 'PoE Switch', 'CAT-POE', 'Power over Ethernet Network Switches', 'Zap'),
+  ('44444444-4444-4444-4444-444444444423', 'Server / Network Rack', 'CAT-RCK', 'Server Racks, Wall Mount & Floor Cabinets', 'Server'),
+  ('44444444-4444-4444-4444-444444444424', 'LAN Cable / Wire', 'CAT-LAN', 'Cat6, Cat6A UTP/STP Network Cable Rolls', 'Cable'),
+  ('44444444-4444-4444-4444-444444444425', 'LED TV / Display', 'CAT-LED', 'LED Smart TVs, Meeting Room Displays, Monitors', 'Tv'),
+  ('44444444-4444-4444-4444-444444444426', 'Telephone / IP Phone', 'CAT-TEL', 'VoIP IP Phones, Analog Intercoms, EPABX', 'Phone'),
+  ('44444444-4444-4444-4444-444444444427', 'Face Attendance Machine', 'CAT-FACE', 'Biometric Face Recognition & RFID Terminals', 'ScanFace'),
+  ('44444444-4444-4444-4444-444444444428', 'Pen Drive / USB Storage', 'CAT-USB', 'USB Flash Drives, OTG Drives', 'Usb'),
+  ('44444444-4444-4444-4444-444444444429', 'Toner / Cartridge', 'CAT-TNR', 'LaserJet Printer Toners and Ink Cartridges', 'Printer');
 
 INSERT IGNORE INTO category_form_fields (category_id, field_name, field_label, field_type, options, is_required, display_order, placeholder) VALUES
   ('44444444-4444-4444-4444-444444444401', 'ram_size', 'RAM Size', 'select', JSON_ARRAY('8 GB', '16 GB', '32 GB', '64 GB', '128 GB'), 1, 1, 'Select RAM'),
