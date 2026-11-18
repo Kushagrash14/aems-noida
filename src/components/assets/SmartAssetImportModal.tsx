@@ -513,9 +513,9 @@ export default function SmartAssetImportModal({
       ['RULE 1: Genuine Excel Only', 'Only genuine .xlsx and .xls files are supported. CSV and other scripts are strictly rejected.'],
       ['RULE 2: Mandatory Columns', '"Asset Name" and "Serial Number" are strictly mandatory for each row.'],
       ['RULE 3: Unique Serial Numbers', 'Every serial number must be globally unique across PG Electroplast.'],
-      ['RULE 4: Smart Custodian Handling', 'If "Employee Code" is provided and the employee does not exist in the database, AEMS will AUTOMATICALLY CREATE their active profile in the Staff Directory and link the asset!'],
+      ['RULE 4: Smart Custodian Handling', 'Employee Code is optional! An employee is recognized when Name, Department, Designation, and either Email or Phone are provided. If they do not exist, AEMS will AUTOMATICALLY CREATE their active profile and link the asset!'],
       ['RULE 5: Inactive Employee Safety', 'If an employee code belongs to an inactive or resigned staff member, the asset will safely route to "In Stock".'],
-      ['RULE 6: Unassigned to Stock', 'If Employee Code is left blank, the asset is automatically added directly to the "In Stock" available pool.'],
+      ['RULE 6: In-Stock Asset Re-Assignment', 'If an uploaded Serial Number already exists in the "In Stock" pool, AEMS will NOT create a duplicate — it will automatically assign and link that existing asset to the specified employee!'],
       ['RULE 7: Invoices & Photos', 'Physical asset photos, invoices, and warranty documents can be uploaded anytime via the "Edit Asset" screen.'],
       ['RULE 8: Plant Code Routing', 'If "Plant Code (e.g. 2060)" is provided (e.g. 2060, 2040, 2010), the asset and employee are mapped directly to that Plant! If left blank, it automatically defaults to the Plant selected in the top dropdown of the modal.'],
     ];
@@ -597,9 +597,11 @@ export default function SmartAssetImportModal({
 
       // Stage 5: In-Depth Row Parsing & Integrity Validation
       const seenSerialsInSheet = new Set<string>();
-      const existingDbSerials = new Set<string>(
-        dbAssets.map((a) => (a.serial_number || '').trim().toUpperCase()).filter(Boolean)
-      );
+      const existingAssetsBySerial = new Map<string, Asset>();
+      dbAssets.forEach((a) => {
+        const s = (a.serial_number || '').trim().toUpperCase();
+        if (s) existingAssetsBySerial.set(s, a);
+      });
       const existingDbEmpCodes = new Map<string, Employee>();
       dbEmployees.forEach((e) => {
         if (e.emp_code) existingDbEmpCodes.set(e.emp_code.trim().toUpperCase(), e);
@@ -754,6 +756,84 @@ export default function SmartAssetImportModal({
           statusMessages.push('Missing Asset Name');
         }
 
+        // Employee Custodian checks
+        // User 4-Point Employee Validation Rule:
+        // 1. Full Name
+        // 2. Department
+        // 3. Designation
+        // 4. Either Email OR Phone
+        const cleanEmpCode = emp_code.toUpperCase();
+        const cleanEmpName = emp_name.trim().toUpperCase();
+        const cleanEmpDept = emp_department.trim().toUpperCase();
+        const cleanEmpDesignation = emp_designation.trim().toUpperCase();
+        const cleanEmpEmail = emp_email.trim().toLowerCase();
+        const cleanEmpPhone = emp_phone.trim();
+
+        const has4PointEmployeeDetails = Boolean(
+          cleanEmpName &&
+          cleanEmpDept &&
+          cleanEmpDesignation &&
+          (cleanEmpEmail || cleanEmpPhone)
+        );
+
+        let targetEmployeeName = '';
+
+        if (cleanEmpCode) {
+          if (existingDbEmpCodes.has(cleanEmpCode)) {
+            const emp = existingDbEmpCodes.get(cleanEmpCode)!;
+            if (emp.status === 'inactive' || (emp.status as string) === 'resigned') {
+              if (status !== 'error') status = 'warning';
+              statusMessages.push(`Staff ${cleanEmpCode} is INACTIVE → Will safely route to In Stock`);
+              isStock = true;
+            } else {
+              isAssigned = true;
+              targetEmployeeName = emp.full_name;
+              statusMessages.push(`Assigned to: ${emp.full_name} (${cleanEmpCode})${cleanEmpDept ? ` [${cleanEmpDept}]` : ''}`);
+            }
+          } else {
+            // Brand new employee auto-provisioning!
+            willCreateEmployee = true;
+            isAssigned = true;
+            targetEmployeeName = cleanEmpName || cleanEmpCode;
+            statusMessages.push(`Auto-Provision: New profile will be created for "${cleanEmpName || cleanEmpCode}"${cleanEmpDept ? ` in [${cleanEmpDept}]` : ''}`);
+          }
+        } else if (has4PointEmployeeDetails) {
+          // Employee Code is optional! User provided all 4 required points: Name, Dept, Designation & Email/Phone
+          const matchedByName = dbEmployees.find((e) => {
+            const sameName = (e.full_name || '').trim().toUpperCase() === cleanEmpName;
+            if (!sameName) return false;
+            const deptName = (e.department?.name || '').trim().toUpperCase();
+            return !cleanEmpDept || deptName.includes(cleanEmpDept) || cleanEmpDept.includes(deptName);
+          });
+
+          if (matchedByName) {
+            if (matchedByName.status === 'inactive' || (matchedByName.status as string) === 'resigned') {
+              if (status !== 'error') status = 'warning';
+              statusMessages.push(`Staff ${matchedByName.full_name} is INACTIVE → Will safely route to In Stock`);
+              isStock = true;
+            } else {
+              isAssigned = true;
+              targetEmployeeName = matchedByName.full_name;
+              statusMessages.push(`Matched Staff: ${matchedByName.full_name} (${matchedByName.emp_code || 'Auto-Code'}) [${cleanEmpDept}]`);
+            }
+          } else {
+            willCreateEmployee = true;
+            isAssigned = true;
+            targetEmployeeName = cleanEmpName;
+            statusMessages.push(`Auto-Provision: New profile for "${cleanEmpName}" (${cleanEmpDesignation}) in [${cleanEmpDept}]`);
+          }
+        } else {
+          // No employee code and incomplete employee info -> direct stock pool
+          isStock = true;
+          if (cleanEmpName) {
+            if (status !== 'error') status = 'warning';
+            statusMessages.push(`Incomplete staff details for "${cleanEmpName}" (Requires Name, Dept, Designation & Email/Phone) → Safely routing to In Stock`);
+          } else {
+            statusMessages.push('Unassigned: Will be added directly to In Stock pool');
+          }
+        }
+
+        // Serial Number Validation & Re-Assignment Checks
         const cleanSerial = serial_number.toUpperCase();
         if (!cleanSerial) {
           status = 'error';
@@ -774,35 +854,26 @@ export default function SmartAssetImportModal({
           }
 
           // Check duplicate against existing database
-          if (existingDbSerials.has(cleanSerial)) {
-            status = 'error';
-            statusMessages.push(`Serial already registered in AEMS database: "${cleanSerial}"`);
-          }
-        }
+          if (existingAssetsBySerial.has(cleanSerial)) {
+            const existingAsset = existingAssetsBySerial.get(cleanSerial)!;
+            const isAssetInStock = !existingAsset.assigned_employee_id || existingAsset.status === 'in_storage';
 
-        // Employee Custodian checks
-        const cleanEmpCode = emp_code.toUpperCase();
-        if (cleanEmpCode) {
-          if (existingDbEmpCodes.has(cleanEmpCode)) {
-            const emp = existingDbEmpCodes.get(cleanEmpCode)!;
-            if (emp.status === 'inactive' || (emp.status as string) === 'resigned') {
-              if (status !== 'error') status = 'warning';
-              statusMessages.push(`Staff ${cleanEmpCode} is INACTIVE → Will safely route to In Stock`);
-              isStock = true;
+            if (isAssigned && targetEmployeeName) {
+              if (isAssetInStock) {
+                // In Stock asset being assigned! This is valid!
+                if (status !== 'error') status = 'valid';
+                statusMessages.push(`⚡ Existing In-Stock Asset [${existingAsset.asset_tag}] → Will be assigned to ${targetEmployeeName}`);
+              } else {
+                // Already assigned to someone else -> transfer notice
+                if (status !== 'error') status = 'warning';
+                statusMessages.push(`⚠️ Asset [${existingAsset.asset_tag}] currently held by ${existingAsset.assigned_employee?.full_name || 'Staff'} → Will be transferred to ${targetEmployeeName}`);
+              }
             } else {
-              isAssigned = true;
-              statusMessages.push(`Assigned to: ${emp.full_name} (${cleanEmpCode})${emp_department ? ` [${emp_department}]` : ''}`);
+              // Asset is in DB and sheet has no valid employee -> harmless duplicate in stock
+              if (status !== 'error') status = 'warning';
+              statusMessages.push(`Existing Asset [${existingAsset.asset_tag}] already in stock. No changes made.`);
             }
-          } else {
-            // Brand new employee auto-provisioning!
-            willCreateEmployee = true;
-            isAssigned = true;
-            statusMessages.push(`Auto-Provision: New profile will be created for "${emp_name || cleanEmpCode}"${emp_department ? ` in [${emp_department}]` : ''}`);
           }
-        } else {
-          // No employee code -> direct stock pool
-          isStock = true;
-          statusMessages.push('Unassigned: Will be added directly to In Stock pool');
         }
 
         if (plant_name) {

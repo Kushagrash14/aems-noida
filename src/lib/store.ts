@@ -1891,25 +1891,25 @@ function normalizeSerial(serial: string | null | undefined): string {
 async function findActiveAssetBySerial(
   serial: string,
   excludeId?: string
-): Promise<{ id: string; asset_tag: string } | null> {
+): Promise<{ id: string; asset_tag: string; assigned_employee_id: string | null; status: string } | null> {
   const clean = normalizeSerial(serial);
   if (!clean) return null;
   if (env.isMockMode) {
     const hit = memory.assets.find(
       (a) => !a.is_deleted && a.id !== excludeId && normalizeSerial(a.serial_number) === clean
     );
-    return hit ? { id: hit.id, asset_tag: hit.asset_tag } : null;
+    return hit ? { id: hit.id, asset_tag: hit.asset_tag, assigned_employee_id: hit.assigned_employee_id || null, status: hit.status } : null;
   }
   const { data, error } = await db
     .from('assets')
-    .select('id, asset_tag, serial_number')
+    .select('id, asset_tag, serial_number, assigned_employee_id, status')
     .ilike('serial_number', clean)
     .eq('is_deleted', false);
   if (error) throw new Error(`Failed to verify serial number: ${error.message}`);
-  const hit = ((data || []) as Array<{ id: string; asset_tag: string; serial_number: string | null }>).find(
+  const hit = ((data || []) as Array<{ id: string; asset_tag: string; serial_number: string | null; assigned_employee_id?: string | null; status?: string }>).find(
     (a) => a.id !== excludeId && normalizeSerial(a.serial_number) === clean
   );
-  return hit ? { id: hit.id, asset_tag: hit.asset_tag } : null;
+  return hit ? { id: hit.id, asset_tag: hit.asset_tag, assigned_employee_id: hit.assigned_employee_id || null, status: hit.status || 'in_storage' } : null;
 }
 
 function duplicateSerialError(serial: string, assetTag: string): Error {
@@ -4488,8 +4488,52 @@ export async function batchImportAssets(
     return { id: resolvedId, typeStr: cleanCat };
   };
 
-  // 2. Preload existing employees into a local lookup Map to deduplicate
-  const empLookup = new Map<string, { id: string; status: string; full_name: string }>();
+  // 2. Preload existing employees into local lookups to deduplicate
+  const empLookup = new Map<string, { id: string; status: string; full_name: string; department_id?: string }>();
+  const empByNameAndDept = new Map<string, { id: string; status: string; full_name: string; emp_code: string }>();
+
+  if (env.isMockMode) {
+    memory.employees.forEach((e) => {
+      if (e.emp_code) {
+        empLookup.set(e.emp_code.toUpperCase(), {
+          id: e.id,
+          status: e.status,
+          full_name: e.full_name,
+          department_id: e.department_id,
+        });
+      }
+      if (e.full_name && e.department_id) {
+        empByNameAndDept.set(`${e.full_name.trim().toUpperCase()}::${e.department_id}`, {
+          id: e.id,
+          status: e.status,
+          full_name: e.full_name,
+          emp_code: e.emp_code || '',
+        });
+      }
+    });
+  } else {
+    const { data: dbEmps } = await db.from('employees').select('id, emp_code, full_name, status, department_id');
+    if (dbEmps) {
+      dbEmps.forEach((e) => {
+        if (e.emp_code) {
+          empLookup.set(e.emp_code.toUpperCase(), {
+            id: e.id,
+            status: e.status,
+            full_name: e.full_name,
+            department_id: e.department_id,
+          });
+        }
+        if (e.full_name && e.department_id) {
+          empByNameAndDept.set(`${(e.full_name || '').trim().toUpperCase()}::${e.department_id}`, {
+            id: e.id,
+            status: e.status,
+            full_name: e.full_name,
+            emp_code: e.emp_code || '',
+          });
+        }
+      });
+    }
+  }
 
   // 3. Preload all plants, locations, and departments for row-level resolution
   let allPlants: Plant[] = [];
@@ -4602,40 +4646,25 @@ export async function batchImportAssets(
     return newDeptId;
   };
 
-  if (env.isMockMode) {
-    memory.employees.forEach((e) => {
-      if (e.emp_code) {
-        empLookup.set(e.emp_code.toUpperCase(), {
-          id: e.id,
-          status: e.status,
-          full_name: e.full_name,
-        });
-      }
-    });
-  } else {
-    const { data: dbEmps } = await db.from('employees').select('id, emp_code, full_name, status');
-    if (dbEmps) {
-      dbEmps.forEach((e) => {
-        if (e.emp_code) {
-          empLookup.set(e.emp_code.toUpperCase(), {
-            id: e.id,
-            status: e.status,
-            full_name: e.full_name,
-          });
-        }
-      });
-    }
-  }
-
-  // 3. Process each asset item sequentially to maintain atomic consistency
+  // 4. Process each asset item sequentially to maintain atomic consistency
   for (const item of items) {
     const cleanSerial = item.serial_number?.trim().toUpperCase();
     if (!cleanSerial) continue;
 
-    const alreadyRegistered = await findActiveAssetBySerial(cleanSerial);
-    if (alreadyRegistered) {
-      result.skipped_rows.push({ serial_number: cleanSerial, reason: `Already registered as ${alreadyRegistered.asset_tag}` });
-      continue;
+    const safePurchaseDate = normalizeImportDate(item.purchase_date);
+    const safeInvoiceDate = normalizeImportDate(item.invoice_date);
+    const safeWarrantyExpiry = normalizeImportDate(item.warranty_expiry);
+    const safeAmcExpiry = normalizeImportDate(item.amc_expiry);
+    const safeAssignedDate = normalizeImportDate(item.assigned_date);
+
+    let safeAssignedAt = now;
+    if (safeAssignedDate) {
+      try {
+        const ad = new Date(`${safeAssignedDate}T00:00:00.000Z`);
+        if (!isNaN(ad.getTime())) {
+          safeAssignedAt = ad.toISOString();
+        }
+      } catch {}
     }
 
     const { id: catId, typeStr: catTypeStr } = await resolveCategoryId(item.category_name);
@@ -4691,9 +4720,27 @@ export async function batchImportAssets(
       }
     }
 
-    // Custodian Resolution & Auto-Creation Logic
-    let assignedEmployeeId: string | null = null;
+    // 3. Custodian Resolution & Auto-Creation Logic
+    // User 4-Point Employee Validation Rule:
+    // 1. Full Name
+    // 2. Department
+    // 3. Designation
+    // 4. Either Email OR Phone
     const cleanEmpCode = item.emp_code?.trim().toUpperCase();
+    const cleanEmpName = item.emp_name?.trim().toUpperCase();
+    const cleanEmpDept = item.emp_department?.trim().toUpperCase();
+    const cleanEmpDesignation = item.emp_designation?.trim().toUpperCase();
+    const cleanEmpEmail = item.emp_email?.trim().toLowerCase();
+    const cleanEmpPhone = item.emp_phone?.trim();
+
+    const has4PointEmployeeDetails = Boolean(
+      cleanEmpName &&
+      cleanEmpDept &&
+      cleanEmpDesignation &&
+      (cleanEmpEmail || cleanEmpPhone)
+    );
+
+    let assignedEmployeeId: string | null = null;
 
     if (cleanEmpCode) {
       if (empLookup.has(cleanEmpCode)) {
@@ -4715,9 +4762,6 @@ export async function batchImportAssets(
               console.warn(`Employee profile update notice for ${cleanEmpCode}:`, updErr);
             }
           }
-        } else {
-          // Inactive employee guard: route safely to stock
-          assignedEmployeeId = null;
         }
       } else {
         // Auto-provision brand new Employee Profile in database with its TRUE DEPARTMENT!
@@ -4761,11 +4805,17 @@ export async function batchImportAssets(
           }
         }
 
-        // Cache in map so future rows in same batch reuse this employee
         empLookup.set(cleanEmpCode, {
           id: newEmpId,
           status: 'active',
           full_name: empFullName,
+          department_id: empDeptId,
+        });
+        empByNameAndDept.set(`${empFullName}::${empDeptId}`, {
+          id: newEmpId,
+          status: 'active',
+          full_name: empFullName,
+          emp_code: cleanEmpCode,
         });
 
         result.employees_created++;
@@ -4776,6 +4826,189 @@ export async function batchImportAssets(
         });
 
         assignedEmployeeId = newEmpId;
+      }
+    } else if (has4PointEmployeeDetails) {
+      // Employee Code is optional! User provided 4-point verified details: Name, Dept, Designation, & Email/Phone
+      const empDeptId = await resolveEmployeeDepartmentId(cleanEmpDept, rowPlantId);
+      const nameDeptKey = `${cleanEmpName}::${empDeptId}`;
+
+      if (empByNameAndDept.has(nameDeptKey)) {
+        const matchedEmp = empByNameAndDept.get(nameDeptKey)!;
+        if (matchedEmp.status !== 'inactive' && (matchedEmp.status as string) !== 'resigned') {
+          assignedEmployeeId = matchedEmp.id;
+          if (!env.isMockMode) {
+            try {
+              await db.from('employees').update({
+                designation: cleanEmpDesignation,
+                ...(cleanEmpEmail ? { email: cleanEmpEmail } : {}),
+                ...(cleanEmpPhone ? { phone: cleanEmpPhone } : {}),
+              }).eq('id', matchedEmp.id);
+            } catch (updErr) {
+              console.warn(`Employee update notice for ${cleanEmpName}:`, updErr);
+            }
+          }
+        }
+      } else {
+        // Auto-provision brand new employee with auto-generated clean code!
+        const newEmpId = crypto.randomUUID();
+        const deptPrefix = (cleanEmpDept || 'GEN').replace(/[^A-Z0-9]/g, '').slice(0, 4) || 'GEN';
+        const randNum = Math.floor(1000 + Math.random() * 9000);
+        const autoEmpCode = `PG-${deptPrefix}-${randNum}`;
+
+        const newEmpData: Employee = {
+          id: newEmpId,
+          emp_code: autoEmpCode,
+          full_name: cleanEmpName!,
+          email: cleanEmpEmail || null,
+          phone: cleanEmpPhone || null,
+          designation: cleanEmpDesignation!,
+          department_id: empDeptId,
+          plant_id: rowPlantId,
+          location_id: rowLocationId,
+          status: 'active',
+          created_at: now,
+          updated_at: now,
+        };
+
+        if (env.isMockMode) {
+          memory.employees.push(newEmpData);
+        } else {
+          try {
+            await db.from('employees').insert({
+              id: newEmpId,
+              emp_code: autoEmpCode,
+              full_name: cleanEmpName,
+              email: cleanEmpEmail || null,
+              phone: cleanEmpPhone || null,
+              designation: cleanEmpDesignation,
+              department_id: empDeptId,
+              plant_id: rowPlantId,
+              location_id: rowLocationId,
+              status: 'active',
+            });
+          } catch (empErr) {
+            console.warn(`Failed to auto-create employee ${autoEmpCode}:`, empErr);
+          }
+        }
+
+        empLookup.set(autoEmpCode, {
+          id: newEmpId,
+          status: 'active',
+          full_name: cleanEmpName!,
+          department_id: empDeptId,
+        });
+        empByNameAndDept.set(nameDeptKey, {
+          id: newEmpId,
+          status: 'active',
+          full_name: cleanEmpName!,
+          emp_code: autoEmpCode,
+        });
+
+        result.employees_created++;
+        result.created_employees.push({
+          id: newEmpId,
+          emp_code: autoEmpCode,
+          full_name: cleanEmpName!,
+        });
+
+        assignedEmployeeId = newEmpId;
+      }
+    } else {
+      // Incomplete staff info or no employee provided -> route safely to stock
+      assignedEmployeeId = null;
+    }
+
+    // 4. Duplicate Guard & Existing In-Stock Re-Assignment Check
+    const alreadyRegistered = await findActiveAssetBySerial(cleanSerial);
+    if (alreadyRegistered) {
+      if (assignedEmployeeId) {
+        // If asset is currently unassigned / in stock:
+        if (!alreadyRegistered.assigned_employee_id || alreadyRegistered.status === 'in_storage') {
+          if (env.isMockMode) {
+            const hit = memory.assets.find((a) => a.id === alreadyRegistered.id);
+            if (hit) {
+              hit.assigned_employee_id = assignedEmployeeId;
+              hit.status = 'in_service';
+              hit.updated_at = now;
+            }
+          } else {
+            await db.from('assets').update({
+              assigned_employee_id: assignedEmployeeId,
+              status: 'in_service',
+              updated_at: now,
+            }).eq('id', alreadyRegistered.id);
+          }
+
+          try {
+            await openAssignment({
+              assetId: alreadyRegistered.id,
+              employeeId: assignedEmployeeId,
+              assignedBy: userId,
+              remarks: item.remarks?.trim() || 'Assigned via Excel Smart Import',
+              at: safeAssignedAt,
+            });
+          } catch (assignErr) {
+            console.warn(`Failed to log asset_assignment record for ${alreadyRegistered.asset_tag}:`, assignErr);
+          }
+
+          result.assets_assigned++;
+          result.imported_tags.push(`${alreadyRegistered.asset_tag} (Assigned)`);
+          continue;
+        } else if (alreadyRegistered.assigned_employee_id === assignedEmployeeId) {
+          result.skipped_rows.push({
+            serial_number: cleanSerial,
+            reason: `${alreadyRegistered.asset_tag} is already assigned to this employee.`,
+          });
+          continue;
+        } else {
+          // Asset is currently held by someone else: reassign / transfer custody
+          if (env.isMockMode) {
+            const hit = memory.assets.find((a) => a.id === alreadyRegistered.id);
+            if (hit) {
+              hit.assigned_employee_id = assignedEmployeeId;
+              hit.status = 'in_service';
+              hit.updated_at = now;
+            }
+          } else {
+            try {
+              await closeOpenAssignments({
+                assetId: alreadyRegistered.id,
+                at: safeAssignedAt,
+                remarks: 'Reassigned via Excel Smart Import',
+              });
+            } catch (closeErr) {
+              console.warn('Failed to close previous assignment:', closeErr);
+            }
+            await db.from('assets').update({
+              assigned_employee_id: assignedEmployeeId,
+              status: 'in_service',
+              updated_at: now,
+            }).eq('id', alreadyRegistered.id);
+          }
+
+          try {
+            await openAssignment({
+              assetId: alreadyRegistered.id,
+              employeeId: assignedEmployeeId,
+              assignedBy: userId,
+              remarks: item.remarks?.trim() || 'Reassigned via Excel Smart Import',
+              at: safeAssignedAt,
+            });
+          } catch (assignErr) {
+            console.warn(`Failed to log asset_assignment record for ${alreadyRegistered.asset_tag}:`, assignErr);
+          }
+
+          result.assets_assigned++;
+          result.imported_tags.push(`${alreadyRegistered.asset_tag} (Reassigned)`);
+          continue;
+        }
+      } else {
+        // Asset already in DB and no custodian in sheet -> skip safely (ZERO duplicate assets!)
+        result.skipped_rows.push({
+          serial_number: cleanSerial,
+          reason: `Already registered as ${alreadyRegistered.asset_tag} (In Stock). No changes made.`,
+        });
+        continue;
       }
     }
 
@@ -4838,28 +5071,12 @@ export async function batchImportAssets(
       past_service_history: item.past_service_history?.trim() || null,
     });
 
-    const safePurchaseDate = normalizeImportDate(item.purchase_date);
-    const safeInvoiceDate = normalizeImportDate(item.invoice_date);
-    const safeWarrantyExpiry = normalizeImportDate(item.warranty_expiry);
-    const safeAmcExpiry = normalizeImportDate(item.amc_expiry);
-    const safeAssignedDate = normalizeImportDate(item.assigned_date);
-
     let safeCreatedAt = now;
     if (safePurchaseDate) {
       try {
         const pd = new Date(`${safePurchaseDate}T00:00:00.000Z`);
         if (!isNaN(pd.getTime())) {
           safeCreatedAt = pd.toISOString();
-        }
-      } catch {}
-    }
-
-    let safeAssignedAt = now;
-    if (safeAssignedDate) {
-      try {
-        const ad = new Date(`${safeAssignedDate}T00:00:00.000Z`);
-        if (!isNaN(ad.getTime())) {
-          safeAssignedAt = ad.toISOString();
         }
       } catch {}
     }
