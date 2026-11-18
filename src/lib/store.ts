@@ -4369,6 +4369,63 @@ export interface BatchImportAssetItem {
   emp_department?: string;
 }
 
+export function normalizeImportDate(val: any): string | null {
+  if (!val) return null;
+  if (val instanceof Date) {
+    return isNaN(val.getTime()) ? null : val.toISOString().slice(0, 10);
+  }
+  if (typeof val === 'number') {
+    if (val > 1000 && val < 100000) {
+      // Excel serial date format (days since 1899-12-30)
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const targetDate = new Date(excelEpoch.getTime() + val * 86400000);
+      return isNaN(targetDate.getTime()) ? null : targetDate.toISOString().slice(0, 10);
+    }
+  }
+
+  const s = String(val).trim();
+  if (!s || s.toLowerCase() === 'n/a' || s.toLowerCase() === 'null' || s === '-' || s === '--') {
+    return null;
+  }
+
+  // Check if string is an Excel numeric serial (e.g. '45000')
+  if (/^\d{4,5}$/.test(s)) {
+    const num = parseFloat(s);
+    if (num > 1000 && num < 100000) {
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const targetDate = new Date(excelEpoch.getTime() + num * 86400000);
+      return isNaN(targetDate.getTime()) ? null : targetDate.toISOString().slice(0, 10);
+    }
+  }
+
+  // YYYY-MM-DD or YYYY/MM/DD or YYYY.MM.DD
+  const isoMatch = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (isoMatch) {
+    const y = isoMatch[1];
+    const m = isoMatch[2].padStart(2, '0');
+    const d = isoMatch[3].padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  // DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY
+  const dmyMatch = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+  if (dmyMatch) {
+    const d = dmyMatch[1].padStart(2, '0');
+    const m = dmyMatch[2].padStart(2, '0');
+    const y = dmyMatch[3];
+    return `${y}-${m}-${d}`;
+  }
+
+  try {
+    const parsed = new Date(s);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toISOString().slice(0, 10);
+    }
+  } catch {}
+
+  return null;
+}
+
 export interface BatchImportPayload {
   location_id: string;
   plant_id: string;
@@ -4781,6 +4838,32 @@ export async function batchImportAssets(
       past_service_history: item.past_service_history?.trim() || null,
     });
 
+    const safePurchaseDate = normalizeImportDate(item.purchase_date);
+    const safeInvoiceDate = normalizeImportDate(item.invoice_date);
+    const safeWarrantyExpiry = normalizeImportDate(item.warranty_expiry);
+    const safeAmcExpiry = normalizeImportDate(item.amc_expiry);
+    const safeAssignedDate = normalizeImportDate(item.assigned_date);
+
+    let safeCreatedAt = now;
+    if (safePurchaseDate) {
+      try {
+        const pd = new Date(`${safePurchaseDate}T00:00:00.000Z`);
+        if (!isNaN(pd.getTime())) {
+          safeCreatedAt = pd.toISOString();
+        }
+      } catch {}
+    }
+
+    let safeAssignedAt = now;
+    if (safeAssignedDate) {
+      try {
+        const ad = new Date(`${safeAssignedDate}T00:00:00.000Z`);
+        if (!isNaN(ad.getTime())) {
+          safeAssignedAt = ad.toISOString();
+        }
+      } catch {}
+    }
+
     const newAssetObj: Asset = {
       id: assetId,
       asset_tag: assignedTag,
@@ -4790,15 +4873,15 @@ export async function batchImportAssets(
       manufacturer: item.manufacturer?.trim().toUpperCase() || null,
       serial_number: cleanSerial,
       category_id: catId,
-      purchase_date: item.purchase_date || null,
-      purchase_cost: item.purchase_cost || null,
+      purchase_date: safePurchaseDate,
+      purchase_cost: typeof item.purchase_cost === 'number' ? item.purchase_cost : (item.purchase_cost ? parseFloat(String(item.purchase_cost).replace(/[^0-9.]/g, '')) || null : null),
       po_number: item.po_number?.trim().toUpperCase() || null,
       invoice_number: item.invoice_number?.trim().toUpperCase() || null,
-      invoice_date: item.invoice_date || null,
+      invoice_date: safeInvoiceDate,
       vendor_name: item.vendor_name?.trim().toUpperCase() || null,
-      warranty_expiry: item.warranty_expiry || null,
+      warranty_expiry: safeWarrantyExpiry,
       amc_vendor: item.amc_vendor?.trim().toUpperCase() || null,
-      amc_expiry: item.amc_expiry || null,
+      amc_expiry: safeAmcExpiry,
       current_location_id: rowLocationId,
       current_plant_id: rowPlantId,
       current_department_id: department_id,
@@ -4807,7 +4890,7 @@ export async function batchImportAssets(
       invoice_document_path: docMetadata,
       is_deleted: false,
       created_by: userId,
-      created_at: item.purchase_date ? (new Date(item.purchase_date).toISOString() || now) : now,
+      created_at: safeCreatedAt,
       updated_at: now,
     };
 
@@ -4819,7 +4902,7 @@ export async function batchImportAssets(
           employeeId: assignedEmployeeId,
           assignedBy: userId,
           remarks: item.remarks?.trim() || 'Batch Excel Assignment',
-          at: item.assigned_date || now,
+          at: safeAssignedAt,
         });
       }
     } else {
@@ -4866,7 +4949,7 @@ export async function batchImportAssets(
             employeeId: assignedEmployeeId,
             assignedBy: userId,
             remarks: item.remarks?.trim() || 'Batch Excel Assignment',
-            at: item.assigned_date || now,
+            at: safeAssignedAt,
           });
         } catch (assignErr) {
           console.warn(`Failed to log asset_assignment record for ${assignedTag}:`, assignErr);

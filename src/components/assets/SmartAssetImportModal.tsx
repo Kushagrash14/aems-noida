@@ -577,7 +577,7 @@ export default function SmartAssetImportModal({
       }
 
       // Stage 4: Parse Excel Workbook
-      const workbook = XLSX.read(buffer, { type: 'array' });
+      const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
       if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
         setSecurityScanPassed(false);
         setSecurityScanAlert('Corrupted File: No valid spreadsheet sheets found.');
@@ -621,6 +621,50 @@ export default function SmartAssetImportModal({
           return '';
         };
 
+        // Bulletproof Date normalization (supports Date objects, Excel serial numbers like 45000, DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD)
+        const getDateVal = (patterns: RegExp[]): string => {
+          for (const key of Object.keys(row)) {
+            if (patterns.some((p) => p.test(key))) {
+              const val = row[key];
+              if (!val) return '';
+              if (val instanceof Date) {
+                return isNaN(val.getTime()) ? '' : val.toISOString().slice(0, 10);
+              }
+              if (typeof val === 'number' && val > 1000 && val < 100000) {
+                const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+                const targetDate = new Date(excelEpoch.getTime() + val * 86400000);
+                return isNaN(targetDate.getTime()) ? '' : targetDate.toISOString().slice(0, 10);
+              }
+              const s = String(val).trim();
+              if (!s || s.toLowerCase() === 'n/a' || s.toLowerCase() === 'null' || s === '-' || s === '--') return '';
+              if (/^\d{4,5}$/.test(s)) {
+                const num = parseFloat(s);
+                if (num > 1000 && num < 100000) {
+                  const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+                  const targetDate = new Date(excelEpoch.getTime() + num * 86400000);
+                  return isNaN(targetDate.getTime()) ? '' : targetDate.toISOString().slice(0, 10);
+                }
+              }
+              const isoMatch = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+              if (isoMatch) {
+                return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
+              }
+              const dmyMatch = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+              if (dmyMatch) {
+                return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
+              }
+              try {
+                const parsed = new Date(s);
+                if (!isNaN(parsed.getTime())) {
+                  return parsed.toISOString().slice(0, 10);
+                }
+              } catch {}
+              return '';
+            }
+          }
+          return '';
+        };
+
         const name = getVal([/^asset.*name$/i, /^name$/i, /^title$/i, /^item$/i]);
         const category_name = getVal([/^asset.*type$/i, /^category$/i, /^type$/i]) || 'EQUIPMENT';
         const manufacturer = getVal([/^manufacturer/i, /^brand$/i, /^make$/i]);
@@ -633,25 +677,25 @@ export default function SmartAssetImportModal({
         const operating_system = getVal([/^operating.*system/i, /^os$/i, /^windows.*ver/i]);
         const mac_address = getVal([/^mac.*address/i, /^mac$/i]);
         const ip_address = getVal([/^ip.*address/i, /^ip$/i]);
-        const purchase_date = getVal([/^purchase.*date/i, /^invoice.*date/i, /^date$/i]);
+        const purchase_date = getDateVal([/^purchase.*date/i, /^invoice.*date/i, /^date$/i]);
         const purchaseCostStr = getVal([/^purchase.*cost/i, /^cost/i, /^price/i, /^amount/i]);
         const purchase_cost = purchaseCostStr ? parseFloat(purchaseCostStr.replace(/[^0-9.]/g, '')) || undefined : undefined;
         const vendor_name = getVal([/^vendor/i, /^supplier/i]);
         const po_number = getVal([/^po.*number/i, /^po.*no/i, /^po$/i]);
         const sap_asset_code = getVal([/^sap.*asset.*code/i, /^sap.*code/i, /^sap$/i, /^asset.*code.*sap/i]);
         const invoice_number = getVal([/^invoice.*number/i, /^invoice.*no/i, /^inv.*no/i, /^invoice$/i]);
-        const invoice_date = getVal([/^invoice.*date/i, /^bill.*date/i]);
-        const warranty_expiry = getVal([/^warranty.*expiry/i, /^warranty/i]);
+        const invoice_date = getDateVal([/^invoice.*date/i, /^bill.*date/i]);
+        const warranty_expiry = getDateVal([/^warranty.*expiry/i, /^warranty/i]);
 
         // Historical Lifecycle, Support & Condition Fields (Pre-AEMS Legacy Status)
         const condition = getVal([/^condition/i, /^asset.*condition/i, /^procurement.*type/i]);
         const lifecycle_status = getVal([/^status/i, /^lifecycle/i, /^operational.*status/i]);
-        const assigned_date = getVal([/^assigned.*date/i, /^deployed.*date/i, /^in.*service.*date/i, /^deployed.*since/i]);
+        const assigned_date = getDateVal([/^assigned.*date/i, /^deployed.*date/i, /^in.*service.*date/i, /^deployed.*since/i]);
         const exact_location = getVal([/^exact.*location/i, /^location.*detail/i, /^desk/i, /^room/i, /^cubicle/i, /^floor/i]);
         const plant_name = getVal([/^plant.*code/i, /^unit.*code/i, /^plant.*unit/i, /^plant/i, /^unit/i, /^factory/i]);
         const location_name = getVal([/^location$/i, /^site/i, /^city/i]);
         const amc_vendor = getVal([/^amc.*vendor/i, /^amc.*provider/i, /^amc.*company/i]);
-        const amc_expiry = getVal([/^amc.*expiry/i, /^amc.*date/i, /^amc.*end/i]);
+        const amc_expiry = getDateVal([/^amc.*expiry/i, /^amc.*date/i, /^amc.*end/i]);
         const past_service_history = getVal([/^past.*service/i, /^service.*history/i, /^repair.*history/i, /^maintenance.*history/i, /^history.*notes/i]);
 
         // Multi-Category Hardware Specifications & Interfacing
