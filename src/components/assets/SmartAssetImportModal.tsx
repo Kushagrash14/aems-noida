@@ -954,9 +954,29 @@ export default function SmartAssetImportModal({
         }),
       });
 
-      const data = await res.json();
+      const rawText = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        // Handle non-JSON HTML error responses (502 Bad Gateway, 504 Timeout, 500 error, or login redirect)
+        const titleMatch = rawText.match(/<title>([^<]+)<\/title>/i);
+        const htmlTitle = titleMatch ? titleMatch[1].trim() : '';
+
+        if (res.status === 502 || htmlTitle.includes('502')) {
+          throw new Error('Server Unavailable (HTTP 502 Bad Gateway): The AEMS application process on the server is restarting or down. Please run "pm2 restart aems" and try again.');
+        }
+        if (res.status === 504 || htmlTitle.includes('504')) {
+          throw new Error('Server Timeout (HTTP 504 Gateway Timeout): The import took too long to respond.');
+        }
+        if (res.status === 401 || res.status === 403 || htmlTitle.toLowerCase().includes('login')) {
+          throw new Error('Your session has expired. Please refresh the page (F5) and log in again.');
+        }
+        throw new Error(`Server returned error (HTTP ${res.status}): ${htmlTitle || rawText.slice(0, 120)}`);
+      }
+
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to complete batch import');
+        throw new Error(data?.error || `Failed to complete batch import (HTTP ${res.status})`);
       }
 
       setImportResult(data);
