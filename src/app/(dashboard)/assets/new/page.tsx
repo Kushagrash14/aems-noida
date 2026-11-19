@@ -459,11 +459,24 @@ function AssetWizardContent() {
   const isMissingMode = entryMode === 'missing';
   const isDirectEntryMode = isStockMode || isDamagedMode || isMissingMode;
 
+  const [isEditLoading, setIsEditLoading] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return Boolean(new URLSearchParams(window.location.search).get('edit'));
+    }
+    return false;
+  });
+
   const [step, setStep] = useState<1 | 2 | 3>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
+      if (params.get('edit')) {
+        return 2;
+      }
       const m = params.get('mode');
       if (m === 'damaged' || m === 'missing') {
+        return 2;
+      }
+      if (params.get('directStock') === 'true') {
         return 2;
       }
     }
@@ -472,6 +485,12 @@ function AssetWizardContent() {
 
   // Reactively respond to client-side search parameter navigation
   useEffect(() => {
+    const isEdit = Boolean(searchParams.get('edit'));
+    if (isEdit) {
+      setStep(2);
+      return;
+    }
+
     const m = searchParams.get('mode');
     const directStock = searchParams.get('directStock') === 'true';
 
@@ -1495,8 +1514,12 @@ function AssetWizardContent() {
   // Preload asset details when in Edit mode (?edit=[assetId])
   useEffect(() => {
     const editId = searchParams.get('edit');
-    if (!editId) return;
+    if (!editId) {
+      setIsEditLoading(false);
+      return;
+    }
 
+    setIsEditLoading(true);
     fetch(`/api/assets/${editId}`)
       .then((r) => r.json())
       .then((data) => {
@@ -1628,9 +1651,13 @@ function AssetWizardContent() {
             setAssignmentMode('in_house');
             if (resolvedExactLoc) setExactLocation(resolvedExactLoc);
           }
+
+          // Jump directly to Step 2 so all prefilled asset details are immediately visible!
+          setStep(2);
         }
       })
-      .catch((err) => console.error('Failed to load asset for editing:', err));
+      .catch((err) => console.error('Failed to load asset for editing:', err))
+      .finally(() => setIsEditLoading(false));
   }, [searchParams]);
 
 
@@ -2856,7 +2883,7 @@ function AssetWizardContent() {
       return;
     }
 
-    if (!sapAssetCode.trim()) {
+    if (!sapAssetCode.trim() && !searchParams.get('edit')) {
       setError('Asset Code (According to SAP) is mandatory. Please enter the SAP Asset Code.');
       setStep(2);
       scrollToTop();
@@ -3148,7 +3175,18 @@ function AssetWizardContent() {
         </div>
       )}
 
-      {/* Header for Stock Entry Mode: High-visibility Stock Entry Mode Banner (Rendered on Step 2) */}
+      {/* Edit Mode Pre-loading State Indicator */}
+      {isEditLoading ? (
+        <div className="flex flex-col items-center justify-center min-h-[420px] bg-white rounded-3xl border border-slate-200/80 shadow-xs p-12 text-center my-6 space-y-3">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <h3 className="text-base font-black text-slate-800">Pre-populating Asset Record...</h3>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+            Loading complete asset details, technical specifications, procurement info, and placement data for instant editing.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* Header for Stock Entry Mode: High-visibility Stock Entry Mode Banner (Rendered on Step 2) */}
       {isStockMode && step === 2 ? (
         <div className="rounded-2xl bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 text-white p-4 sm:p-5 shadow-md border border-emerald-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -3231,15 +3269,19 @@ function AssetWizardContent() {
             </div>
           )}
 
-          {/* Header for Step 2 & 3: Compact progress indicator */}
+          {/* Header for Step 2 & 3: Compact progress indicator / Edit Mode Tabs */}
           {step > 1 && !isStockMode && (
-            <div className="flex items-center justify-between pb-1">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-1 gap-3">
               <div className="flex items-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => {
-                    setStep(1);
-                    scrollToTop();
+                    if (searchParams.get('edit')) {
+                      router.push(`/assets/${searchParams.get('edit')}`);
+                    } else {
+                      setStep(1);
+                      scrollToTop();
+                    }
                   }}
                   className="p-1 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-slate-200/70 transition-colors cursor-pointer border border-transparent hover:border-slate-300"
                   title="Go Back"
@@ -3249,19 +3291,55 @@ function AssetWizardContent() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight leading-tight">
-                      {searchParams.get('edit') ? `Edit Asset (${assetTag || 'Details'})` : 'Register Asset'}
+                      {searchParams.get('edit') ? `Edit Asset: ${assetTag || 'Details'}` : 'Register Asset'}
                     </h1>
                   </div>
                   <p className="text-[11px] text-slate-500">
-                    {step === 2
+                    {searchParams.get('edit')
+                      ? `Editing ${name || [manufacturer, model].filter(Boolean).join(' ') || 'Asset'} • All details pre-populated below`
+                      : step === 2
                       ? 'Step 2 of 3: Equipment details & technical specifications'
                       : 'Step 3 of 3: Location, plant & employee assignment'}
                   </p>
                 </div>
               </div>
-              <span className="text-xs font-black px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full uppercase tracking-wider">
-                Step {step} of 3
-              </span>
+
+              {searchParams.get('edit') ? (
+                <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStep(2);
+                      scrollToTop();
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      step === 2
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    }`}
+                  >
+                    1. Specs &amp; Procurement
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStep(3);
+                      scrollToTop();
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      step === 3
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    }`}
+                  >
+                    2. Plant, Dept &amp; Custody
+                  </button>
+                </div>
+              ) : (
+                <span className="text-xs font-black px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full uppercase tracking-wider">
+                  Step {step} of 3
+                </span>
+              )}
             </div>
           )}
         </>
@@ -4987,7 +5065,8 @@ function AssetWizardContent() {
                   </span>
                 </button>
               ) : (
-                /* In Standard Entry Wizard Mode: ONLY show Proceed to Assignment */
+                /* In Standard Entry Wizard Mode: show Proceed to Assignment & Direct Save in Edit mode */
+                <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -5009,7 +5088,7 @@ function AssetWizardContent() {
                     if (!manufacturer.trim()) setManufacturer(effectiveManufacturer);
                     if (!model.trim()) setModel(effectiveModel);
 
-                    if (!sapAssetCode.trim()) {
+                    if (!sapAssetCode.trim() && !searchParams.get('edit')) {
                       setError('Asset Code (According to SAP) is mandatory. Please enter the SAP Asset Code in Section 1.');
                       scrollToTop();
                       return;
@@ -5069,9 +5148,21 @@ function AssetWizardContent() {
                   }}
                   className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
                 >
-                  <span>Proceed to Assignment</span>
+                  <span>{searchParams.get('edit') ? 'Next: Plant, Dept & Custody' : 'Proceed to Assignment'}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
+                {searchParams.get('edit') && (
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={loading}
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>{loading ? 'Saving Updates...' : 'Save & Update Asset'}</span>
+                  </button>
+                )}
+                </div>
               )}
             </div>
           </div>
@@ -5601,6 +5692,8 @@ function AssetWizardContent() {
           </div>
         </div>
       )}
+    </>
+  )}
 
       {/* ========================================================================= */}
       {/* INLINE EMPLOYEE PROFILE CREATION MODAL                                    */}

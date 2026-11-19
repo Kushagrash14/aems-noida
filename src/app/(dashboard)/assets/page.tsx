@@ -116,9 +116,19 @@ function AssetsDirectoryContent() {
 
   // Transfer modal state
   const [transferringAsset, setTransferringAsset] = useState<Asset | null>(null);
+  const [toPlantId, setToPlantId] = useState('');
+  const [toLocationId, setToLocationId] = useState('');
   const [toDepartmentId, setToDepartmentId] = useState('');
   const [transferReason, setTransferReason] = useState('');
   const [transferLoading, setTransferLoading] = useState(false);
+
+  const openTransferModal = (a: Asset) => {
+    setTransferringAsset(a);
+    setToPlantId(a.current_plant_id || (plants[0]?.id ?? ''));
+    setToLocationId(a.current_location_id || '');
+    setToDepartmentId(a.current_department_id || '');
+    setTransferReason('');
+  };
 
   // Soft Delete modal state
   const [deletingAsset, setDeletingAsset] = useState<Asset | null>(null);
@@ -593,7 +603,7 @@ const DEFAULT_DEPT_CATEGORIES: Record<string, string[]> = {
     }
   };
 
-  // Department Transfer submit handler
+  // Department & Plant Transfer submit handler
   const handleTransferSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!transferringAsset) return;
@@ -605,10 +615,10 @@ const DEFAULT_DEPT_CATEGORIES: Record<string, string[]> = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           assetId: transferringAsset.id,
-          toDepartmentId,
-          toLocationId: transferringAsset.current_location_id,
-          toPlantId: transferringAsset.current_plant_id,
-          reason: transferReason,
+          toDepartmentId: toDepartmentId || transferringAsset.current_department_id,
+          toLocationId: toLocationId || transferringAsset.current_location_id,
+          toPlantId: toPlantId || transferringAsset.current_plant_id,
+          reason: transferReason.trim() || undefined,
         }),
       });
 
@@ -1208,9 +1218,9 @@ const DEFAULT_DEPT_CATEGORIES: Record<string, string[]> = {
                         </Link>
                         <button
                           type="button"
-                          onClick={() => setTransferringAsset(a)}
+                          onClick={() => openTransferModal(a)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
-                          title="Department Transfer"
+                          title="Quick Transfer Plant / Dept"
                         >
                           <ArrowRightLeft className="w-4 h-4" />
                         </button>
@@ -1259,15 +1269,15 @@ const DEFAULT_DEPT_CATEGORIES: Record<string, string[]> = {
         </div>
       </div>
 
-      {/* DEPARTMENT TRANSFER MODAL */}
+      {/* QUICK PLANT & DEPARTMENT TRANSFER MODAL */}
       {transferringAsset && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <ArrowRightLeft className="w-5 h-5 text-blue-600" />
+                <ArrowRightLeft className="w-5 h-5 text-indigo-600" />
                 <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
-                  Transfer Asset Department
+                  Quick Transfer Asset (Plant & Dept)
                 </h3>
               </div>
               <button
@@ -1279,14 +1289,37 @@ const DEFAULT_DEPT_CATEGORIES: Record<string, string[]> = {
               </button>
             </div>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1">
               <div className="font-bold text-slate-900">{transferringAsset.name}</div>
-              <div className="text-slate-500 font-mono text-[11px] mt-0.5">
-                Tag: {transferringAsset.asset_tag} | Current Dept: {transferringAsset.department?.name || 'Unassigned'}
+              <div className="text-slate-500 font-mono text-[11px]">
+                Tag: {transferringAsset.asset_tag}
+              </div>
+              <div className="text-slate-600 text-[11px] font-medium pt-1 border-t border-slate-200/60 flex items-center justify-between">
+                <span>Current Plant: <strong className="text-slate-900">{transferringAsset.plant?.name || 'Assigned Plant'}</strong></span>
+                <span>Dept: <strong className="text-slate-900">{transferringAsset.department?.name || 'Unassigned'}</strong></span>
               </div>
             </div>
 
             <form onSubmit={handleTransferSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Target Destination Plant *
+                </label>
+                <select
+                  required
+                  value={toPlantId}
+                  onChange={(e) => setToPlantId(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
+                >
+                  <option value="">-- Select Target Plant --</option>
+                  {plants.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.code ? `(${p.code})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Target Destination Department *
@@ -1295,7 +1328,7 @@ const DEFAULT_DEPT_CATEGORIES: Record<string, string[]> = {
                   required
                   value={toDepartmentId}
                   onChange={(e) => setToDepartmentId(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs"
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
                 >
                   <option value="">-- Select Target Department --</option>
                   {departments.map((d) => (
@@ -1314,8 +1347,8 @@ const DEFAULT_DEPT_CATEGORIES: Record<string, string[]> = {
                   rows={2}
                   value={transferReason}
                   onChange={(e) => setTransferReason(e.target.value)}
-                  placeholder="e.g. Reassigned for production line expansion"
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs resize-none"
+                  placeholder="e.g. Moved to Plant 2040 for SMT line expansion"
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs resize-none"
                 />
               </div>
 

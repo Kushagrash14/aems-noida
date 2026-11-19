@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Asset, User, Employee, Department } from '@/types/database';
+import { Asset, User, Employee, Department, Plant, Location } from '@/types/database';
 import { AssetHistoryRecord } from '@/lib/store';
 import AssetQRCode from '@/components/assets/AssetQRCode';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
@@ -13,6 +13,7 @@ import { getAssetPreviewImage } from '@/lib/assetVisuals';
 import { displayAssetType } from '@/lib/assetType';
 import {
   ArrowLeft,
+  ArrowRightLeft,
   Edit2,
   Trash2,
   ExternalLink,
@@ -95,6 +96,25 @@ function AssetDetailContent() {
   const [childReturnRemarks, setChildReturnRemarks] = useState('');
   const [submittingChildReturn, setSubmittingChildReturn] = useState(false);
 
+  // Quick Transfer Modal states (Move Plant & Department)
+  const [plants, setPlants] = useState<Plant[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferPlantId, setTransferPlantId] = useState('');
+  const [transferDeptId, setTransferDeptId] = useState('');
+  const [transferLocationId, setTransferLocationId] = useState('');
+  const [transferReason, setTransferReason] = useState('');
+  const [transferring, setTransferring] = useState(false);
+
+  const openTransferModal = () => {
+    if (!asset) return;
+    setTransferPlantId(asset.current_plant_id || '');
+    setTransferDeptId(asset.current_department_id || '');
+    setTransferLocationId(asset.current_location_id || '');
+    setTransferReason('');
+    setShowTransferModal(true);
+  };
+
   // 3-Lines Action Dropdown Menu state & ref
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -125,11 +145,13 @@ function AssetDetailContent() {
   useEffect(() => {
     async function load() {
       try {
-        const [assetRes, userRes, empRes, deptRes] = await Promise.all([
+        const [assetRes, userRes, empRes, deptRes, plantsRes, locsRes] = await Promise.all([
           fetch(`/api/assets/${assetId}`).then((r) => r.json()),
           fetch('/api/auth/me').then((r) => r.json()).catch(() => ({ user: null })),
           fetch('/api/employees').then((r) => r.json()).catch(() => ({ employees: [] })),
           fetch('/api/settings/departments').then((r) => r.json()).catch(() => ({ departments: [] })),
+          fetch('/api/plants').then((r) => r.json()).catch(() => ({ plants: [] })),
+          fetch('/api/locations').then((r) => r.json()).catch(() => ({ locations: [] })),
         ]);
 
         if (!assetRes.asset) {
@@ -146,6 +168,12 @@ function AssetDetailContent() {
         }
         if (deptRes?.departments) {
           setDepartments(deptRes.departments);
+        }
+        if (plantsRes?.plants) {
+          setPlants(plantsRes.plants);
+        }
+        if (locsRes?.locations) {
+          setLocations(locsRes.locations);
         }
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Failed to load asset');
@@ -333,6 +361,40 @@ function AssetDetailContent() {
     }
   };
 
+  const handleTransferSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!asset) return;
+    if (!transferPlantId || !transferDeptId) {
+      alert('Destination Plant and Department are required.');
+      return;
+    }
+    setTransferring(true);
+    try {
+      const res = await fetch('/api/assets/transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assetId: asset.id,
+          toPlantId: transferPlantId,
+          toLocationId: transferLocationId || asset.current_location_id,
+          toDepartmentId: transferDeptId,
+          reason: transferReason.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Transfer failed');
+      setShowTransferModal(false);
+      await reloadAssetFromServer();
+      setActionToast('Asset successfully transferred to new Plant / Department!');
+      setTimeout(() => setActionToast(null), 4000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Transfer failed';
+      alert(msg);
+    } finally {
+      setTransferring(false);
+    }
+  };
+
   const openDeleteModal = () => {
     setShowDeleteModal(true);
   };
@@ -498,7 +560,20 @@ function AssetDetailContent() {
           </div>
 
           {/* Right: 3-Lines Action Menu & Unique QR Code */}
-          <div className="flex items-center gap-3 self-end md:self-start relative" ref={menuRef}>
+          <div className="flex items-center gap-2.5 self-end md:self-start relative" ref={menuRef}>
+            {/* Quick Move / Transfer Plant Button */}
+            {!isScrapped && (
+              <button
+                type="button"
+                onClick={openTransferModal}
+                className="px-3 py-2 rounded-xl border border-indigo-200 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-700 transition-all font-bold text-xs flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                title="Quick Transfer Plant & Department"
+              >
+                <ArrowRightLeft className="w-4 h-4 text-indigo-600" />
+                <span className="hidden sm:inline">Transfer Plant</span>
+              </button>
+            )}
+
             {/* 3-Lines Hamburger Menu Button next to QR Code */}
             <div className="relative">
               <button
@@ -527,8 +602,23 @@ function AssetDetailContent() {
                     className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors font-bold"
                   >
                     <Edit2 className="w-4 h-4 text-blue-600" />
-                    <span>Edit</span>
+                    <span>Edit Asset</span>
                   </Link>
+
+                  {/* Option 1b: Quick Transfer Plant & Department */}
+                  {!isScrapped && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        openTransferModal();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors text-left font-bold cursor-pointer"
+                    >
+                      <ArrowRightLeft className="w-4 h-4 text-indigo-600" />
+                      <span>Transfer Plant / Dept</span>
+                    </button>
+                  )}
 
                   {/* Status Indicator Badges when Actions are Restricted */}
                   {isMissing && (
@@ -1811,6 +1901,111 @@ function AssetDetailContent() {
         <div className="fixed top-5 right-5 z-50 flex items-center gap-2 rounded-2xl bg-emerald-600 text-white px-5 py-3 text-xs font-bold shadow-xl animate-in fade-in slide-in-from-top-4 duration-200">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{actionToast}</span>
+        </div>
+      )}
+
+      {/* QUICK PLANT & DEPARTMENT TRANSFER MODAL */}
+      {showTransferModal && asset && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <ArrowRightLeft className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                  Quick Transfer Asset (Plant & Dept)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTransferModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1">
+              <div className="font-bold text-slate-900">{asset.name}</div>
+              <div className="text-slate-500 font-mono text-[11px]">
+                Tag: {asset.asset_tag} {asset.serial_number ? `| S/N: ${asset.serial_number}` : ''}
+              </div>
+              <div className="text-slate-600 text-[11px] font-medium pt-1 border-t border-slate-200/60 flex items-center justify-between">
+                <span>Current Plant: <strong className="text-slate-900">{asset.plant?.name || 'Assigned Plant'}</strong></span>
+                <span>Dept: <strong className="text-slate-900">{asset.department?.name || 'Unassigned'}</strong></span>
+              </div>
+            </div>
+
+            <form onSubmit={handleTransferSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Target Destination Plant *
+                </label>
+                <select
+                  required
+                  value={transferPlantId}
+                  onChange={(e) => setTransferPlantId(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
+                >
+                  <option value="">-- Select Target Plant --</option>
+                  {plants.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.code ? `(${p.code})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Target Destination Department *
+                </label>
+                <select
+                  required
+                  value={transferDeptId}
+                  onChange={(e) => setTransferDeptId(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
+                >
+                  <option value="">-- Select Target Department --</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Reason for Transfer
+                </label>
+                <textarea
+                  rows={2}
+                  value={transferReason}
+                  onChange={(e) => setTransferReason(e.target.value)}
+                  placeholder="e.g. Moved to Plant 2040 for SMT line expansion"
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowTransferModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs font-bold hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={transferring}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-xs"
+                >
+                  <ArrowRightLeft className="w-4 h-4" />
+                  <span>{transferring ? 'Transferring...' : 'Execute Transfer'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
