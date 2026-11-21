@@ -9,7 +9,7 @@ module.exports = {
       name: 'aems',
       cwd: path.resolve(__dirname, '..'),
       script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3000 -H 127.0.0.1',
+      args: 'start -p 3000 -H 0.0.0.0',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
